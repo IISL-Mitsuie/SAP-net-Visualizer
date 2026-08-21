@@ -1,4 +1,4 @@
-#define MyAppName "SAP-net Dynamic Parameter Visualizer"
+#define MyAppName "SAP-net Visualizer"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "IISL Mitsuie Lab"
 #define MyAppExeName "SAP-net-Visualizer.exe"

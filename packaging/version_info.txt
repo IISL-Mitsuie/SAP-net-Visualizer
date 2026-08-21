@@ -31,12 +31,12 @@ VSVersionInfo(
           '041104b0',
           [
             StringStruct('CompanyName', 'IISL Mitsuie Lab'),
-            StringStruct('FileDescription', 'SAP-net Dynamic Parameter Visualizer & Replay Viewer'),
+            StringStruct('FileDescription', 'SAP-net Visualizer'),
             StringStruct('FileVersion', '1.0.0.0'),
             StringStruct('InternalName', 'SAP-net-Visualizer'),
             StringStruct('LegalCopyright', 'Copyright (C) 2026 IISL Mitsuie Lab. All rights reserved.'),
             StringStruct('OriginalFilename', 'SAP-net-Visualizer.exe'),
-            StringStruct('ProductName', 'SAP-net Dynamic Parameter Visualizer'),
+            StringStruct('ProductName', 'SAP-net Visualizer'),
             StringStruct('ProductVersion', '1.0.0.0'),
           ]
         ),
@@ -44,12 +44,12 @@ VSVersionInfo(
           '040904b0',
           [
             StringStruct('CompanyName', 'IISL Mitsuie Lab'),
-            StringStruct('FileDescription', 'SAP-net Dynamic Parameter Visualizer & Replay Viewer'),
+            StringStruct('FileDescription', 'SAP-net Visualizer'),
             StringStruct('FileVersion', '1.0.0.0'),
             StringStruct('InternalName', 'SAP-net-Visualizer'),
             StringStruct('LegalCopyright', 'Copyright (C) 2026 IISL Mitsuie Lab. All rights reserved.'),
             StringStruct('OriginalFilename', 'SAP-net-Visualizer.exe'),
-            StringStruct('ProductName', 'SAP-net Dynamic Parameter Visualizer'),
+            StringStruct('ProductName', 'SAP-net Visualizer'),
             StringStruct('ProductVersion', '1.0.0.0'),
           ]
         )

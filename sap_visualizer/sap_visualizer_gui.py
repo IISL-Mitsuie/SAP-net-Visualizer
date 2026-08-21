@@ -58,7 +58,7 @@ class SAPVisualizerGUI:
             return
 
         pygame.init()
-        pygame.display.set_caption("SAP-net Dynamic Parameter Visualizer & Replay Viewer")
+        pygame.display.set_caption("SAP-net Visualizer")
         self.screen = pygame.display.set_mode((self.width, self.height))
         self.clock = pygame.time.Clock()
         
@@ -398,7 +398,7 @@ class SAPVisualizerGUI:
                         pygame.quit()
                     except Exception:
                         pass
-                    print("[INFO] SAP Visualizer window closed.")
+                    print("[INFO] SAP-net Visualizer window closed.")
                     return True
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -881,7 +881,7 @@ class SAPVisualizerGUI:
                 pygame.quit()
             except Exception:
                 pass
-            print(f"[INFO] SAP Visualizer window closed: {e}")
+            print(f"[INFO] SAP-net Visualizer window closed: {e}")
 
     def _draw_subheader_info(self, info_str, y_pos=46, max_width=655):
         """サブヘッダー情報（フレーム・エピソード・ステップ等）をクリッピング＆長文時に水平動的自動スクロール描画"""
@@ -1520,7 +1520,7 @@ class SAPVisualizerGUI:
             # ターゲット未指定時はダイアログを自動起動
             self.open_folder_dialog()
             
-        print("[INFO] Starting Standalone SAP Parameter Visualizer...")
+        print("[INFO] Starting Standalone SAP-net Visualizer...")
         while self.is_active:
             if not self.handle_events():
                 break

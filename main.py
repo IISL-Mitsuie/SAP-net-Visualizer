@@ -17,7 +17,7 @@ from sap_visualizer import SAPVisualLogger, SAPVisualizerGUI
 
 def main():
     print("=" * 60)
-    print("      SAP-net Dynamic Parameter Visualizer & Replay Viewer")
+    print("      SAP-net Visualizer")
     print("=" * 60)
     
     logger = SAPVisualLogger(enabled=True)
@@ -57,7 +57,7 @@ def main():
     print("  マウス       : タイムラインスライダーのドラッグ / ボタン操作")
     print("-" * 60)
 
-    print("[INFO] Starting Standalone SAP Parameter Visualizer...")
+    print("[INFO] Starting Standalone SAP-net Visualizer...")
     while gui.is_active:
         if not gui.handle_events():
             break
@@ -68,7 +68,7 @@ def main():
         pygame.quit()
     except Exception:
         pass
-    print("[INFO] SAP Visualizer terminated cleanly.")
+    print("[INFO] SAP-net Visualizer terminated cleanly.")
 
 if __name__ == "__main__":
     main()
