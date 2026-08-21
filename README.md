@@ -93,6 +93,7 @@ python main.py "path/to/experiment_log_folder/sap_dynamic_log_20260801_120000.js
 ## 対応ログフォーマット仕様
 
 本ビューアーは、以下の構造を持つ gzip 圧縮 JSON Lines（`.jsonl.gz`）または通常の JSON Lines（`.jsonl`）形式のログを読み込みます。
+詳細な仕様や最小構成・推奨構成の比較については **[DATA_FORMAT.md](DATA_FORMAT.md)** をご覧ください。
 
 ### 1フレームのデータ構造例
 ```json
@@ -166,6 +167,7 @@ SAP-net-Visualizer/
 ├── build_all.ps1                   # ワンクリック全自動クリーンビルドスクリプト (PowerShell)
 ├── .gitignore                      # Git除外設定
 ├── README.md                       # 本ドキュメント
+├── DATA_FORMAT.md                  # データフォーマット仕様書 (最小構成/推奨構成)
 ├── requirements.txt                # 最小限の依存関係
 ├── main.py                         # アプリケーションエントリーポイント
 ├── image_icon.png                  # アプリアイコン元画像
