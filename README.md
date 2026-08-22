@@ -154,7 +154,7 @@ Windows 環境において、専用のクリーンな一時仮想環境の作成
 .\build_all.ps1
 ```
 
-- **生成されるインストーラー**: `dist_installer/SAP_net_Visualizer_Setup_v1.0.0.exe`
+- **生成されるインストーラー**: `dist_installer/SAP_net_Visualizer_Setup_v1.0.1.exe`
 - **インストール先**: ユーザーの `%LOCALAPPDATA%\Programs\SAP-net-Visualizer`（管理者権限不要）
 
 ---

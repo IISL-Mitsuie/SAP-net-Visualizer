@@ -100,7 +100,20 @@ def main():
 
     print("=" * 60)
     print("  BUILD PROCESS FINISHED!")
-    setup_exe = installer_output_dir / "SAP_net_Visualizer_Setup_v1.0.0.exe"
+    
+    # installer.iss からバージョン番号を動的抽出
+    app_version = "1.0.1"
+    if iss_file.exists():
+        try:
+            with open(iss_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if "MyAppVersion" in line and '"' in line:
+                        app_version = line.split('"')[1]
+                        break
+        except Exception:
+            pass
+
+    setup_exe = installer_output_dir / f"SAP_net_Visualizer_Setup_v{app_version}.exe"
     if setup_exe.exists():
         print(f"  [SUCCESS] Windows Installer: {setup_exe}")
     standalone_exe = dist_dir / "SAP-net-Visualizer" / "SAP-net-Visualizer.exe"
