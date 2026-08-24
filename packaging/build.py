@@ -7,9 +7,63 @@ and cleans up all temporary build environments.
 import os
 import sys
 import shutil
+import stat
 import subprocess
 import time
+import tempfile
 from pathlib import Path
+
+def remove_readonly(func, path, excinfo):
+    """Windowsの読み取り専用属性を強制解除して削除を再試行するハンドラ"""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        pass
+
+def safe_rmtree(path, retries=5, delay=0.5):
+    """
+    Windows環境のファイルロックや読み取り専用属性に対応した堅牢なディレクトリ削除
+    """
+    p = Path(path)
+    if not p.exists():
+        return
+
+    for attempt in range(retries):
+        try:
+            if sys.version_info >= (3, 12):
+                def _onexc(func, filepath, err):
+                    try:
+                        os.chmod(filepath, stat.S_IWRITE)
+                        func(filepath)
+                    except Exception:
+                        pass
+                shutil.rmtree(p, onexc=_onexc)
+            else:
+                shutil.rmtree(p, onerror=remove_readonly)
+
+            if not p.exists():
+                return
+        except Exception:
+            pass
+        time.sleep(delay)
+
+    if p.exists():
+        try:
+            shutil.rmtree(p, ignore_errors=True)
+        except Exception:
+            pass
+
+def kill_existing_process():
+    """実行中の SAP-net-Visualizer.exe プロセスがあれば安全に終了"""
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/IM", "SAP-net-Visualizer.exe", "/T"],
+            capture_output=True,
+            check=False
+        )
+    except Exception:
+        pass
 
 def main():
     root_dir = Path(__file__).resolve().parent.parent
@@ -19,25 +73,42 @@ def main():
     print("  SAP-net Visualizer Full-Auto Clean Build Script")
     print("=" * 60)
 
-    venv_dir = root_dir / ".venv_build"
-    build_dir = root_dir / "build"
+    # Google Driveのファイルロックやクラウド同期遅延を回避するため、
+    # 一時的なビルド用仮想環境および中間ビルドディレクトリはローカルTemp内に配置
+    temp_base = Path(tempfile.gettempdir())
+    venv_dir = temp_base / "sap_net_visualizer_build_venv"
+    build_dir = temp_base / "sap_net_visualizer_build_work"
+    legacy_venv = root_dir / ".venv_build"
+    legacy_build = root_dir / "build"
+
     dist_dir = root_dir / "dist"
     installer_output_dir = root_dir / "dist_installer"
     requirements_file = root_dir / "requirements.txt"
     spec_file = root_dir / "packaging" / "SAP-net-Visualizer.spec"
     iss_file = root_dir / "packaging" / "installer.iss"
 
-    # 1. Clean previous build virtual environment
-    print("[1/5] Creating clean temporary virtual environment (.venv_build)...")
-    if venv_dir.exists():
-        shutil.rmtree(venv_dir, ignore_errors=True)
-    if build_dir.exists():
-        shutil.rmtree(build_dir, ignore_errors=True)
+    # 1. Clean previous build virtual environment and output directories
+    print("[1/5] Cleaning previous build artifacts and creating clean virtual environment...")
+    kill_existing_process()
+    safe_rmtree(venv_dir)
+    safe_rmtree(build_dir)
+    safe_rmtree(legacy_venv)
+    safe_rmtree(legacy_build)
+    safe_rmtree(dist_dir)
 
-    try:
-        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-    except Exception as e:
-        print(f"[ERROR] Failed to create virtual environment: {e}")
+    venv_created = False
+    for attempt in range(3):
+        try:
+            subprocess.run([sys.executable, "-m", "venv", "--clear", str(venv_dir)], check=True)
+            venv_created = True
+            break
+        except Exception as e:
+            print(f"[WARNING] Virtualenv creation attempt {attempt + 1} failed: {e}. Retrying...")
+            safe_rmtree(venv_dir)
+            time.sleep(1)
+
+    if not venv_created:
+        print("[ERROR] Failed to create virtual environment.")
         return 1
 
     venv_python = venv_dir / "Scripts" / "python.exe"
@@ -51,17 +122,27 @@ def main():
         subprocess.run([str(venv_pip), "install", "-r", str(requirements_file)], check=True)
     except Exception as e:
         print(f"[ERROR] Failed to install dependencies: {e}")
-        shutil.rmtree(venv_dir, ignore_errors=True)
+        safe_rmtree(venv_dir)
         return 1
 
     # 3. Build standalone binary with PyInstaller
     print("[3/5] Building standalone binary with PyInstaller...")
     try:
-        subprocess.run([str(venv_pyinstaller), "--noconfirm", str(spec_file)], check=True)
+        subprocess.run(
+            [
+                str(venv_pyinstaller),
+                "--noconfirm",
+                "--workpath", str(build_dir),
+                "--distpath", str(dist_dir),
+                str(spec_file)
+            ],
+            check=True
+        )
         print("[INFO] PyInstaller standalone binary created successfully.")
     except Exception as e:
         print(f"[ERROR] PyInstaller build failed: {e}")
-        shutil.rmtree(venv_dir, ignore_errors=True)
+        safe_rmtree(venv_dir)
+        safe_rmtree(build_dir)
         return 1
 
     # 4. Search Inno Setup and compile installer
@@ -91,12 +172,9 @@ def main():
             print(f"[ERROR] Inno Setup script not found: {iss_file}")
 
     # 5. Clean up temporary virtual environment and build cache
-    print("[5/5] Cleaning up temporary build environment (.venv_build and build/)...")
-    time.sleep(1)
-    if venv_dir.exists():
-        shutil.rmtree(venv_dir, ignore_errors=True)
-    if build_dir.exists():
-        shutil.rmtree(build_dir, ignore_errors=True)
+    print("[5/5] Cleaning up temporary build environment...")
+    safe_rmtree(venv_dir)
+    safe_rmtree(build_dir)
 
     print("=" * 60)
     print("  BUILD PROCESS FINISHED!")
