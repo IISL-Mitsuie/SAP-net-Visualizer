@@ -1,14 +1,13 @@
 import os
 import json
 import gzip
-import numpy as np
 
 class SAPVisualLogger:
     """
-    SAP-netの動的パラメータ（活性値A, 重み行列weight, 選択plan, 活性化フラグ, 転移評価等）の
-    時系列ログ記録・ファイル保存・読み込みおよびメモリバッファ管理を行うクラス。
+    SAP-netの動的パラメータログファイル（.jsonl.gz / .jsonl）の読み込み・パース
+    およびメモリバッファ管理を行うクラス（ビューアー用）。
     """
-    def __init__(self, log_dir=None, timestamp=None, enabled=True):
+    def __init__(self, log_dir=None, timestamp=None, enabled=True, **kwargs):
         self.enabled = enabled
         self.log_dir = log_dir
         self.timestamp = timestamp
@@ -16,62 +15,11 @@ class SAPVisualLogger:
         self.log_file_path = None
         self.last_error_msg = ""
         self.last_missing_file_type = ""
-        
-        if self.enabled and self.log_dir and self.timestamp:
-            os.makedirs(self.log_dir, exist_ok=True)
-            self.log_file_path = os.path.join(self.log_dir, f"sap_dynamic_log_{self.timestamp}.jsonl.gz")
-
-    def record_frame(self, episode, step, event_type, A, weight, plan=None, selectplans=None, policyvalue=None, reused_action=None, threshold=0.18):
-        """
-        1フレーム（1ステップまたは特定イベント発生時）の状態をメモリバッファ (self.history) にキャプチャする。
-        毎ステップのディスク I/O を回避し、処理速度を最高速に保ちます。
-        """
-        if not self.enabled:
-            return
-            
-        frame_data = {
-            "index": len(self.history),
-            "episode": int(episode),
-            "step": int(step),
-            "event_type": str(event_type),  # "STEP", "ACTIVATION", "SELECT_PLAN", "WEIGHT_UPDATE"
-            "A": np.array(A, dtype=float).tolist() if A is not None else [],
-            "weight": np.array(weight, dtype=float).tolist() if weight is not None else [],
-            "plan": int(plan) if plan is not None else None,
-            "selectplans": np.array(selectplans, dtype=int).tolist() if selectplans is not None else [],
-            "policyvalue": np.array(policyvalue, dtype=float).tolist() if policyvalue is not None else [],
-            "reused_action": int(reused_action) if reused_action is not None else None,
-            "threshold": float(threshold) if threshold is not None else 0.18,
-        }
-        
-        self.history.append(frame_data)
-
-    def save_to_file(self):
-        """
-        メモリ上の全フレーム履歴 (self.history) を一連の gzip 圧縮 JSONL ファイルとして一括保存する。
-        エピソード終了時やログ記録完了時に呼び出すことで、ファイル I/O を最小化し末尾破損を完全に防止します。
-        """
-        if not self.enabled or not self.log_file_path or not self.history:
-            return False
-            
-        try:
-            with gzip.open(self.log_file_path, "wt", encoding="utf-8") as f:
-                for frame in self.history:
-                    f.write(json.dumps(frame) + "\n")
-            print(f"[INFO] Saved {len(self.history)} SAP visual log frames to {self.log_file_path}")
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to save SAP visual log: {e}")
-            return False
-
-    def __del__(self):
-        """デストラクタ（重複I/Oおよびシャットダウン時の例外発生を回避するため自動保存は行わない）"""
-        pass
-
 
     def load_from_file(self, log_file_path):
         """
         保存されたJSONL (.jsonl / .jsonl.gz) ファイルからログを読み込む（オフラインビューアー用）。
-        中途終了等でファイル末尾が破損している場合でも、正常に解凍・パースできたフレームを最大減レスキューします。
+        中途終了等でファイル末尾が破損している場合でも、正常に解凍・パースできたフレームを最大限レスキューします。
         """
         self.history = []
         self.log_file_path = log_file_path
@@ -169,13 +117,6 @@ class SAPVisualLogger:
         if 0 <= index < len(self.history):
             return self.history[index]
         return None
-
-    def find_frame_by_episode_step(self, episode, step):
-        """エピソード番号とステップ数から一致するフレームのインデックスを検索"""
-        for i, frame in enumerate(self.history):
-            if frame["episode"] == episode and frame["step"] >= step:
-                return i
-        return len(self.history) - 1 if self.history else 0
 
     def find_next_event_index(self, current_index, event_type):
         """指定したイベント種別（ACTIVATION, SELECT_PLAN, WEIGHT_UPDATE, NEW_EPISODE）の次のフレームインデックスを検索"""

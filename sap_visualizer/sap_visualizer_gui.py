@@ -1505,23 +1505,3 @@ class SAPVisualizerGUI:
         close_txt = self.font_medium.render("'H' キーまたは 'Esc' キー（または 'ヘルプ' ボタン）で閉じる", True, (100, 120, 150))
         c_rect = close_txt.get_rect(center=(dlg_x + dlg_w // 2, dlg_y + dlg_h - 22))
         self.screen.blit(close_txt, c_rect)
-
-    def run_standalone_viewer(self, target_path=None):
-        """保存済みログファイルまたは実験フォルダを読み込んで独立GUIビューアーを起動する（未指定時はフォルダ選択ダイアログを表示）"""
-        if target_path:
-            success = False
-            if os.path.isdir(target_path):
-                success = self.logger.load_from_folder(target_path)
-            else:
-                success = self.logger.load_from_file(target_path)
-            if not success:
-                print(f"[WARNING] Could not load target path: {target_path}")
-        else:
-            # ターゲット未指定時はダイアログを自動起動
-            self.open_folder_dialog()
-            
-        print("[INFO] Starting Standalone SAP-net Visualizer...")
-        while self.is_active:
-            if not self.handle_events():
-                break
-            self.draw()
