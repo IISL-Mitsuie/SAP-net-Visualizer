@@ -97,6 +97,50 @@ class SAPVisualizerGUI:
         self.slider_rect = pygame.Rect(20, 550, self.width - 40, 15)
         self.is_dragging_slider = False
 
+    def get_resolved_frame_info(self, frame_index):
+        """
+        指定したフレームインデックスにおける動的パラメータ情報を取得する。
+        A や weight, plan, selectplans が空・None（イベント行等）の場合は直前の有効フレームからフォールバック復元する。
+        戻り値:
+            plan (int or None): 選択中の知識番号
+            selectplans (list[int]): 転移候補知識フラグ (0/1配列)
+            A (list[float]): 活性値リスト
+            weight (list[list[float]]): 重み行列
+            episode (int): エピソード番号
+            step (int): ステップ番号
+            event_type (str): イベント種別
+        """
+        if not self.logger.history or not (0 <= frame_index < len(self.logger.history)):
+            return None, [], [], [], 0, 0, ""
+
+        frame = self.logger.history[frame_index]
+        plan = frame.get("plan")
+        selectplans = frame.get("selectplans", [])
+        A_raw = frame.get("A", [])
+        weight_raw = frame.get("weight", [])
+        episode = frame.get("episode", 0)
+        step = frame.get("step", 0)
+        event_type = frame.get("event_type", "STEP")
+
+        # 未設定フィールドを過去フレームに遡って探索
+        if plan is None or not A_raw or not weight_raw or not selectplans:
+            for p_idx in range(frame_index - 1, -1, -1):
+                p_fr = self.logger.history[p_idx]
+                if plan is None and p_fr.get("plan") is not None:
+                    plan = p_fr.get("plan")
+                if not A_raw and p_fr.get("A"):
+                    A_raw = p_fr.get("A")
+                if not selectplans and p_fr.get("selectplans"):
+                    selectplans = p_fr.get("selectplans", [])
+                if not weight_raw and p_fr.get("weight"):
+                    weight_raw = p_fr.get("weight", [])
+                
+                # すべて取得できたら早期終了
+                if plan is not None and len(A_raw) > 0 and len(weight_raw) > 0 and len(selectplans) > 0:
+                    break
+
+        return plan, selectplans, A_raw, weight_raw, episode, step, event_type
+
     def _setup_buttons(self):
         """ウィンドウ幅に合わせて2段のボタンレイアウト（上段8個・下段7個）を動的に均等計算して構築"""
         margin_left = 20
@@ -344,11 +388,17 @@ class SAPVisualizerGUI:
         x_axis_lbl = self.font_small.render("フレーム数 (Step)", True, (60, 70, 80))
         surf.blit(x_axis_lbl, (gx + (gw - x_axis_lbl.get_width()) // 2, gy + gh + 28))
 
-        # 5. 各ノードの折れ線描画 (表示オンのノードのみ)
+        # 5. 各ノードの折れ線描画 (表示オンのノードのみ ＆ 高速化ストライド)
+        stride = max(1, total_frames // (gw * 2))
+        indices = list(range(0, total_frames, stride))
+        if indices[-1] != total_frames - 1:
+            indices.append(total_frames - 1)
+
         for i in vis_node_indices:
             points = []
             c_color = self.node_colors[i % len(self.node_colors)]
-            for frame_idx, f in enumerate(self.logger.history):
+            for frame_idx in indices:
+                f = self.logger.history[frame_idx]
                 A = f.get("A", [])
                 if i < len(A):
                     val = max(0.0, min(1.0, float(A[i])))
@@ -746,65 +796,19 @@ class SAPVisualizerGUI:
             else:
                 # --- 従来のステップ表示画面 (ネットワーク構造 ＋ 活性値棒グラフ) ---
                 if frame:
-                    info_str = f"フレーム: {self.current_index}/{max(0, total_frames-1)} | エピソード: {frame['episode']} | ステップ: {frame['step']} | イベント: {frame['event_type']} | 選択知識: {frame['plan']}"
-                    self._draw_subheader_info(info_str, y_pos=46, max_width=685)
+                    plan, selectplans, A_raw, weight_raw, ep, st, ev = self.get_resolved_frame_info(self.current_index)
+                    plan_disp = f"知識 {plan}" if plan is not None else "なし"
+                    info_str = f"フレーム: {self.current_index}/{max(0, total_frames-1)} | エピソード: {ep} | ステップ: {st} | イベント: {ev} | 選択知識: {plan_disp}"
+                    self._draw_subheader_info(info_str, y_pos=46, max_width=660)
 
                     # --- 2. ネットワーク構造の描画 (左側 400x450) ---
                     net_center_x, net_center_y = 230, 290
                     net_radius = 150
 
-                    A_raw = frame.get("A", [])
-                    weight_raw = frame.get("weight", [])
-                    plan = frame.get("plan")
-                    selectplans = frame.get("selectplans", [])
-
                     # ノード数の決定 (Aの長さ、weightのサイズ、または全ログからの推測)
                     num_nodes = len(A_raw) if len(A_raw) > 0 else (len(weight_raw) if len(weight_raw) > 0 else 0)
-
-                    # Aが空（WEIGHT_UPDATE等のイベント）の場合、直前の有効なフレームから状態をフォールバック復元
-                    if len(A_raw) > 0:
-                        A = np.array(A_raw, dtype=float)
-                    else:
-                        prev_A = None
-                        prev_plan = plan
-                        prev_selectplans = selectplans
-                        for p_idx in range(self.current_index - 1, -1, -1):
-                            p_fr = self.logger.get_frame(p_idx)
-                            if p_fr and len(p_fr.get("A", [])) > 0:
-                                prev_A = np.array(p_fr["A"], dtype=float)
-                                if prev_plan is None:
-                                    prev_plan = p_fr.get("plan")
-                                if not prev_selectplans:
-                                    prev_selectplans = p_fr.get("selectplans", [])
-                                break
-                        if prev_A is not None:
-                            A = prev_A
-                            if num_nodes == 0:
-                                num_nodes = len(A)
-                        else:
-                            A = np.zeros(num_nodes, dtype=float)
-
-                        if plan is None:
-                            plan = prev_plan
-                        if not selectplans:
-                            selectplans = prev_selectplans
-
-                    # weight のフォールバック
-                    if len(weight_raw) > 0:
-                        weight = np.array(weight_raw, dtype=float)
-                    else:
-                        prev_weight = None
-                        for p_idx in range(self.current_index - 1, -1, -1):
-                            p_fr = self.logger.get_frame(p_idx)
-                            if p_fr and len(p_fr.get("weight", [])) > 0:
-                                prev_weight = np.array(p_fr["weight"], dtype=float)
-                                break
-                        if prev_weight is not None:
-                            weight = prev_weight
-                            if num_nodes == 0:
-                                num_nodes = len(weight)
-                        else:
-                            weight = np.zeros((num_nodes, num_nodes), dtype=float)
+                    A = np.array(A_raw, dtype=float) if len(A_raw) > 0 else np.zeros(num_nodes, dtype=float)
+                    weight = np.array(weight_raw, dtype=float) if len(weight_raw) > 0 else np.zeros((num_nodes, num_nodes), dtype=float)
 
                     if num_nodes == 0 and len(weight) > 0:
                         num_nodes = len(weight)
@@ -995,7 +999,7 @@ class SAPVisualizerGUI:
                 pass
             print(f"[INFO] SAP-net Visualizer window closed: {e}")
 
-    def _draw_subheader_info(self, info_str, y_pos=46, max_width=655):
+    def _draw_subheader_info(self, info_str, y_pos=46, max_width=660):
         """サブヘッダー情報（フレーム・エピソード・ステップ等）をクリッピング＆長文時に水平動的自動スクロール描画"""
         info_surf = self.font_medium.render(info_str, True, (40, 60, 90))
         txt_w = info_surf.get_width()
@@ -1031,13 +1035,20 @@ class SAPVisualizerGUI:
         """活性値変動推移の重ね合わせ折れ線グラフ画面の描画"""
         total_frames = len(self.logger.history)
         
+        # 現在選択中フレームの解決済みパラメータを取得
+        c_plan, c_selectplans, c_A, _, c_ep, c_st, _ = (
+            self.get_resolved_frame_info(self.current_index)
+            if (total_frames > 0 and 0 <= self.current_index < total_frames)
+            else (None, [], [], [], 0, 0, "")
+        )
+
         # サブヘッダーフレーム情報
         if total_frames > 0 and 0 <= self.current_index < total_frames:
-            frame = self.logger.history[self.current_index]
-            info_str = f"活性値変動推移ビュー | 現在選択: フレーム {self.current_index}/{total_frames-1} | エピソード: {frame.get('episode',0)} | ステップ: {frame.get('step',0)}"
+            plan_str = f"知識 {c_plan}" if c_plan is not None else "なし"
+            info_str = f"活性値変動推移ビュー | 現在選択: フレーム {self.current_index}/{total_frames-1} | エピソード: {c_ep} | ステップ: {c_st} | 選択知識: {plan_str}"
         else:
             info_str = "活性値変動推移ビュー | ログ未読み込み"
-        self._draw_subheader_info(info_str, y_pos=46, max_width=685)
+        self._draw_subheader_info(info_str, y_pos=46, max_width=660)
 
         chart_x, chart_y = self.chart_rect.x, self.chart_rect.y
         chart_w, chart_h = self.chart_rect.width, self.chart_rect.height
@@ -1084,7 +1095,7 @@ class SAPVisualizerGUI:
                 if f.get("A"):
                     num_nodes = max(num_nodes, len(f["A"]))
 
-        # 3. 知識表示/非表示トグルボタンの描画・生成
+        # 3. 知識表示/非表示トグルボタンの描画・生成（選択中知識のハイライト付き）
         self.node_toggle_rects = []
         for i in range(num_nodes):
             if i not in self.visible_nodes:
@@ -1098,12 +1109,20 @@ class SAPVisualizerGUI:
             self.node_toggle_rects.append((i, btn_rect))
 
             is_vis = self.visible_nodes[i]
+            is_plan = (c_plan == i)
             c_color = self.node_colors[i % len(self.node_colors)]
 
-            bg_col = (235, 243, 255) if is_vis else (240, 240, 240)
-            border_col = c_color if is_vis else (180, 180, 180)
+            if is_plan:
+                bg_col = (255, 246, 220) if is_vis else (245, 238, 220)
+                border_col = (230, 160, 20)
+                border_w = 2
+            else:
+                bg_col = (235, 243, 255) if is_vis else (240, 240, 240)
+                border_col = c_color if is_vis else (180, 180, 180)
+                border_w = 2 if is_vis else 1
+
             pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=4)
-            pygame.draw.rect(self.screen, border_col, btn_rect, 2 if is_vis else 1, border_radius=4)
+            pygame.draw.rect(self.screen, border_col, btn_rect, border_w, border_radius=4)
 
             # 色丸マーク
             pygame.draw.circle(self.screen, c_color, (btn_rect.x + 14, btn_rect.centery), 6)
@@ -1111,7 +1130,9 @@ class SAPVisualizerGUI:
                 pygame.draw.line(self.screen, (150, 150, 150), (btn_rect.x + 8, btn_rect.centery - 6), (btn_rect.x + 20, btn_rect.centery + 6), 2)
 
             chk_str = f"知識 {i}" + (" [✓]" if is_vis else " [  ]")
-            txt_color = (20, 30, 50) if is_vis else (130, 130, 130)
+            if is_plan:
+                chk_str += " ★選択"
+            txt_color = (190, 110, 0) if (is_plan and is_vis) else ((20, 30, 50) if is_vis else (130, 130, 130))
             n_txt = self.font_small.render(chk_str, True, txt_color)
             self.screen.blit(n_txt, (btn_rect.x + 26, btn_rect.centery - n_txt.get_height() // 2))
 
@@ -1147,14 +1168,19 @@ class SAPVisualizerGUI:
         t_lbl = self.font_small.render(f"活性化閾値 ({thresh_val:.2f})", True, (200, 40, 40))
         self.screen.blit(t_lbl, (chart_x + chart_w - 120, thresh_y - 18))
 
-        # 7. 各知識の時系列折れ線描画 (マルチライン)
+        # 7. 各知識の時系列折れ線描画 (マルチライン ＆ 高速化ストライド)
+        stride = max(1, total_frames // (chart_w * 2))
+        indices = list(range(0, total_frames, stride))
+        if indices[-1] != total_frames - 1:
+            indices.append(total_frames - 1)
+
         for i in range(num_nodes):
             if not self.visible_nodes.get(i, True):
                 continue
             
             c_color = self.node_colors[i % len(self.node_colors)]
             points = []
-            for idx in range(total_frames):
+            for idx in indices:
                 px = chart_x + int((idx / float(total_frames - 1)) * chart_w)
                 frame_data = self.logger.history[idx]
                 act_list = frame_data.get("A", [])
@@ -1166,17 +1192,53 @@ class SAPVisualizerGUI:
             if len(points) >= 2:
                 pygame.draw.lines(self.screen, c_color, False, points, 2)
 
-        # 8. 現在選択中フレームの垂直カーソル線描画
+        # 8. 現在選択中フレームの垂直カーソル線 ＆ 選択知識マーカー描画
         if 0 <= self.current_index < total_frames:
             cur_x = chart_x + int((self.current_index / float(total_frames - 1)) * chart_w)
+            # 垂直カーソル線
             pygame.draw.line(self.screen, (30, 90, 220), (cur_x, chart_y), (cur_x, chart_y + chart_h), 2)
             
-            c_frame = self.logger.history[self.current_index]
-            cur_txt = f"フレーム {self.current_index} (Ep:{c_frame.get('episode',0)}, Step:{c_frame.get('step',0)})"
+            # 選択されている知識（plan）の折れ線上の現在ポイントを二重丸＋バッジで強調
+            if c_plan is not None and self.visible_nodes.get(c_plan, True):
+                p_act = c_A[c_plan] if c_plan < len(c_A) else 0.0
+                p_act = min(1.0, max(0.0, float(p_act)))
+                py = chart_y + chart_h - int(p_act * chart_h)
+                p_color = self.node_colors[c_plan % len(self.node_colors)]
+
+                # 外側リング（金色・発光風）＋中心ドット
+                pygame.draw.circle(self.screen, (240, 190, 30), (cur_x, py), 9, 3)
+                pygame.draw.circle(self.screen, (255, 255, 255), (cur_x, py), 6)
+                pygame.draw.circle(self.screen, p_color, (cur_x, py), 4)
+
+                # 活性値バッジ（ポイント近傍の吹き出し）
+                act_badge_txt = f"知識{c_plan}: {p_act:.2f}"
+                act_surf = self.font_tiny.render(act_badge_txt, True, (30, 40, 60))
+                bw = act_surf.get_width() + 8
+                bh = 16
+                bx = cur_x + 10
+                if bx + bw > chart_x + chart_w - 4:
+                    bx = cur_x - bw - 10
+                by = max(chart_y + 4, min(py - 8, chart_y + chart_h - bh - 4))
+                
+                b_rect = pygame.Rect(bx, by, bw, bh)
+                pygame.draw.rect(self.screen, (255, 248, 220), b_rect, border_radius=3)
+                pygame.draw.rect(self.screen, (220, 160, 20), b_rect, 1, border_radius=3)
+                self.screen.blit(act_surf, (bx + 4, by + 1))
+
+            # カーソル上部情報バッジ
+            plan_label = f"選択知識: 知識 {c_plan}" if c_plan is not None else "選択知識: なし"
+            cur_txt = f"フレーム {self.current_index} (Ep:{c_ep}, Step:{c_st}) | {plan_label}"
             c_surf = self.font_small.render(cur_txt, True, (255, 255, 255))
-            c_bg = pygame.Rect(min(cur_x - 10, chart_x + chart_w - 180), chart_y + 8, c_surf.get_width() + 12, 20)
-            pygame.draw.rect(self.screen, (30, 70, 150), c_bg, border_radius=4)
-            self.screen.blit(c_surf, (c_bg.x + 6, c_bg.y + 3))
+            
+            c_w = c_surf.get_width() + 16
+            c_left = min(max(cur_x - c_w // 2, chart_x + 4), chart_x + chart_w - c_w - 4)
+            c_bg = pygame.Rect(c_left, chart_y + 8, c_w, 22)
+            
+            bg_col = (20, 50, 110) if c_plan is not None else (40, 60, 90)
+            border_col = (240, 200, 40) if c_plan is not None else (100, 140, 200)
+            pygame.draw.rect(self.screen, bg_col, c_bg, border_radius=4)
+            pygame.draw.rect(self.screen, border_col, c_bg, 2 if c_plan is not None else 1, border_radius=4)
+            self.screen.blit(c_surf, (c_bg.x + 8, c_bg.y + 4))
 
     def load_config_data(self, return_status=False):
         """ログファイルに付随する config_used_*.yaml を読み込む。存在しない場合はフォールバック情報を生成して返す"""
@@ -1539,12 +1601,12 @@ class SAPVisualizerGUI:
         self.screen.blit(sec1_title, (col1_x, y_curr))
         
         items_sec1 = [
-            ("icon_gold", "選択中の知識 (金色二重枠)", "現在エージェントが実行に選択している知識"),
+            ("icon_gold", "選択中の知識 (金色二重枠/マーカー)", "実行中知識（グラフ上でも金色サークル＆バッジで強調）"),
             ("icon_green", "転移候補知識 (緑色二重枠)", f"活性化基準(閾値 {thresh_val:.2f})を超えた転移候補知識"),
             ("icon_color", "ノードの色 (活性度 A)", "赤: 活性値の高い知識 A>=0.5 / 青: 非活性 A=0"),
             ("icon_weight", "強い知識間重みの線", "太く濃い青色の線ほど結合が強固（数値バッジ付き）"),
             ("icon_barchart", "活性値バーグラフ (右側)", "各知識の活性値 A のリアルタイムバーチャート"),
-            ("icon_linechart", "活性値変動推移グラフ (Gキー)", "全知識の活性値の時系列変化を重ね合わせて表示"),
+            ("icon_linechart", "活性値変動推移グラフ (Gキー)", "全知識の活性値の時系列変化（選択中の知識を金色強調）"),
             ("icon_threshold", f"活性化閾値線 ({thresh_val:.2f})", f"活性化閾値 ({thresh_val:.2f}) の赤色線"),
             ("icon_live", "リアルタイム追従モード", "シミュレーションの最新ステップにリアルタイム自動追従"),
         ]
