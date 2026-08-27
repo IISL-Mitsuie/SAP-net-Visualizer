@@ -137,20 +137,18 @@ class SAPVisualLogger:
             logger.error(self.last_error_msg)
             return False
 
-        # 1. 優先パターン: sap_dynamic_log_*.jsonl.gz / *.jsonl
+        # 1. 優先パターン: フォルダ直下の sap_dynamic_log_*.jsonl.gz / *.jsonl
         log_files = glob.glob(os.path.join(folder_path, "sap_dynamic_log_*.jsonl*"))
         if not log_files:
-            # 2. 汎用パターン: *.jsonl.gz / *.jsonl
+            # 2. 汎用パターン: フォルダ直下の *.jsonl.gz / *.jsonl
             log_files = glob.glob(os.path.join(folder_path, "*.jsonl*"))
-        if not log_files:
-            # 3. サブフォルダ探索
-            log_files = glob.glob(os.path.join(folder_path, "**", "sap_dynamic_log_*.jsonl*"), recursive=True)
 
         if not log_files:
-            self.last_error_msg = "フォルダ内に【SAP動的パラメータログファイル (*.jsonl.gz / *.jsonl)】が見つかりませんでした。"
+            self.last_error_msg = "フォルダ直下に【SAP動的パラメータログファイル (*.jsonl.gz / *.jsonl)】が見つかりませんでした。"
             self.last_missing_file_type = "SAP動的パラメータログファイル (*.jsonl.gz / *.jsonl)"
             logger.error(f"{self.last_error_msg} ({folder_path})")
             return False
+
 
         # 複数存在する場合は最新のファイルを採用
         target_log_file = max(log_files, key=os.path.getmtime)
