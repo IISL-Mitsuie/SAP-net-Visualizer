@@ -90,8 +90,8 @@ class TestSAPVisualLogger(unittest.TestCase):
         success = logger.load_from_file(gz_path)
         self.assertTrue(success)
         self.assertEqual(len(logger.history), len(frames))
-        self.assertEqual(logger.history[0]["episode"], 1)
-        self.assertEqual(logger.history[4]["episode"], 2)
+        self.assertEqual(logger.history[0].episode, 1)
+        self.assertEqual(logger.history[4].episode, 2)
 
     def test_load_from_file_plain_jsonl(self):
         """非圧縮JSONLファイルの読み込みテスト"""
