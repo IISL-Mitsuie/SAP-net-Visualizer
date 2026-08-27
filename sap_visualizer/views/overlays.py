@@ -60,17 +60,14 @@ class OverlaysView(BaseView):
 
         # 5. カラムヘッダー描画
         head_y = dlg_y + 58
-        th_param = self.font_medium.render("パラメータ名", True, COLOR_TEXT_MUTED)
-        th_val = self.font_medium.render("設定値", True, COLOR_TEXT_MUTED)
-        th_desc = self.font_medium.render("概要・説明", True, COLOR_TEXT_MUTED)
+        th_param = self.font_medium.render("パラメータ設定項目 (Key / Structure)", True, COLOR_TEXT_MUTED)
+        th_val = self.font_medium.render("設定値 (Value)", True, COLOR_TEXT_MUTED)
 
-        col_param_x = dlg_x + 25
-        col_val_x = dlg_x + 265
-        col_desc_x = dlg_x + 425
+        col_param_x = dlg_x + 30
+        col_val_x = dlg_x + 470
 
         self.screen.blit(th_param, (col_param_x, head_y))
         self.screen.blit(th_val, (col_val_x, head_y))
-        self.screen.blit(th_desc, (col_desc_x, head_y))
         pygame.draw.line(self.screen, (200, 212, 230), (dlg_x + 20, head_y + 24), (dlg_x + dlg_w - 20, head_y + 24), 2)
 
         # 6. テーブルコンテンツのクリッピング可視領域定義
@@ -84,44 +81,70 @@ class OverlaysView(BaseView):
         y_curr = content_top - scroll_y
         get_w_func = lambda s: self.font_small.size(s)[0]
 
-        for idx, item in enumerate(config_items):
-            name_str = str(item[0]).strip().replace("\n", "")
-            val_str = str(item[1]).strip().replace("\n", "") if item[1] is not None else "-"
-            desc_str = str(item[2]).strip().replace("\n", "") if len(item) > 2 else ""
+        data_row_count = 0
 
-            name_lines = wrap_text_to_lines(name_str, get_w_func, 230)
-            val_lines = wrap_text_to_lines(val_str, lambda s: self.font_medium.size(s)[0], 150)
-            desc_lines = wrap_text_to_lines(desc_str, get_w_func, 400)
+        for item in config_items:
+            is_sec = item.get("is_section", False)
+            key_str = str(item.get("key", "")).strip()
+            val_str = str(item.get("value", "")).strip()
+            val_type = item.get("val_type", "str")
 
-            val_color = COLOR_ACCENT_RED if ("SAP" in name_str or "REWARD" in name_str) else (25, 115, 45)
+            if is_sec:
+                # --- セクション見出し帯の描画 ---
+                sec_h = 28
+                if y_curr + sec_h >= content_top and y_curr <= content_top + content_h:
+                    # セクション背景帯
+                    sec_rect = pygame.Rect(dlg_x + 20, y_curr + 4, dlg_w - 40, sec_h - 4)
+                    pygame.draw.rect(self.screen, (226, 236, 248), sec_rect, border_radius=4)
+                    pygame.draw.rect(self.screen, (30, 80, 162), (dlg_x + 20, y_curr + 4, 4, sec_h - 4), border_top_left_radius=4, border_bottom_left_radius=4)
 
-            name_surfs = [self.font_small.render(l, True, (25, 55, 115)) for l in name_lines]
-            val_surfs = [self.font_medium.render(l, True, val_color) for l in val_lines]
-            desc_surfs = [self.font_small.render(l, True, (80, 90, 110)) for l in desc_lines]
+                    sec_title = self.font_medium.render(f"■ {key_str}", True, (20, 45, 90))
+                    self.screen.blit(sec_title, (col_param_x + 4, y_curr + 7))
 
-            max_lines = max(len(name_surfs), len(val_surfs), len(desc_surfs), 1)
-            line_h = 19
-            row_padding = 8
-            item_h = max(30, max_lines * line_h + row_padding)
+                y_curr += sec_h + 4
+                data_row_count = 0
+            else:
+                # --- パラメータデータ行の描画 ---
+                data_row_count += 1
+                name_lines = wrap_text_to_lines(key_str, get_w_func, 410)
+                val_lines = wrap_text_to_lines(val_str, lambda s: self.font_medium.size(s)[0], 340)
 
-            if y_curr + item_h >= content_top and y_curr <= content_top + content_h:
-                if idx % 2 == 1:
-                    pygame.draw.rect(self.screen, COLOR_BG_ZEBRA, (dlg_x + 20, y_curr, dlg_w - 40, item_h - 2), border_radius=4)
+                # 値の種別に応じた色分け
+                if val_type == "bool":
+                    val_color = (25, 135, 50) if val_str == "True" else (160, 40, 40)
+                elif val_type == "number":
+                    val_color = COLOR_ACCENT_RED if ("THRESHOLD" in key_str or "REWARD" in key_str) else (20, 90, 180)
+                elif val_type == "list":
+                    val_color = (55, 70, 90)
+                elif val_type == "none":
+                    val_color = (130, 140, 150)
+                else:
+                    val_color = COLOR_TEXT_BODY
 
-                for i, srf in enumerate(name_surfs):
-                    self.screen.blit(srf, (col_param_x, y_curr + 4 + i * line_h))
+                name_surfs = [self.font_small.render(l, True, (25, 55, 115)) for l in name_lines]
+                val_surfs = [self.font_medium.render(l, True, val_color) for l in val_lines]
 
-                for i, srf in enumerate(val_surfs):
-                    self.screen.blit(srf, (col_val_x, y_curr + 4 + i * line_h))
+                max_lines = max(len(name_surfs), len(val_surfs), 1)
+                line_h = 19
+                row_padding = 8
+                item_h = max(28, max_lines * line_h + row_padding)
 
-                for i, srf in enumerate(desc_surfs):
-                    self.screen.blit(srf, (col_desc_x, y_curr + 4 + i * line_h))
+                if y_curr + item_h >= content_top and y_curr <= content_top + content_h:
+                    if data_row_count % 2 == 1:
+                        pygame.draw.rect(self.screen, COLOR_BG_ZEBRA, (dlg_x + 20, y_curr, dlg_w - 40, item_h - 2), border_radius=4)
 
-                pygame.draw.line(self.screen, COLOR_BORDER_LIGHT, (dlg_x + 20, y_curr + item_h - 1), (dlg_x + dlg_w - 20, y_curr + item_h - 1), 1)
+                    for i, srf in enumerate(name_surfs):
+                        self.screen.blit(srf, (col_param_x + 12, y_curr + 4 + i * line_h))
 
-            y_curr += item_h
+                    for i, srf in enumerate(val_surfs):
+                        self.screen.blit(srf, (col_val_x, y_curr + 4 + i * line_h))
+
+                    pygame.draw.line(self.screen, COLOR_BORDER_LIGHT, (dlg_x + 20, y_curr + item_h - 1), (dlg_x + dlg_w - 20, y_curr + item_h - 1), 1)
+
+                y_curr += item_h
 
         self.screen.set_clip(old_clip)
+
 
         # 7. スクロールバー計算
         total_content_height = y_curr + scroll_y - content_top
