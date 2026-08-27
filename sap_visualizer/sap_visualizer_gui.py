@@ -70,6 +70,7 @@ class SAPVisualizerGUI:
         
         # 日本語表示対応フォントのリスト (Windows: meiryo, msgothic / Mac: hiragino / Linux: takao)
         font_names = ["meiryo", "msgothic", "yugothic", "hiragino sans", "takao gothic", "arial"]
+        self.font_tiny = pygame.font.SysFont(font_names, 11, bold=True)
         self.font_small = pygame.font.SysFont(font_names, 13)
         self.font_medium = pygame.font.SysFont(font_names, 15, bold=True)
         self.font_title = pygame.font.SysFont(font_names, 18, bold=True)
@@ -751,11 +752,62 @@ class SAPVisualizerGUI:
                     # --- 2. ネットワーク構造の描画 (左側 400x450) ---
                     net_center_x, net_center_y = 230, 290
                     net_radius = 150
-                    A = np.array(frame["A"]) if frame["A"] else np.zeros(0)
-                    weight = np.array(frame["weight"]) if frame["weight"] else np.zeros((0, 0))
-                    num_nodes = len(A)
-                    plan = frame["plan"]
-                    selectplans = frame["selectplans"]
+
+                    A_raw = frame.get("A", [])
+                    weight_raw = frame.get("weight", [])
+                    plan = frame.get("plan")
+                    selectplans = frame.get("selectplans", [])
+
+                    # ノード数の決定 (Aの長さ、weightのサイズ、または全ログからの推測)
+                    num_nodes = len(A_raw) if len(A_raw) > 0 else (len(weight_raw) if len(weight_raw) > 0 else 0)
+
+                    # Aが空（WEIGHT_UPDATE等のイベント）の場合、直前の有効なフレームから状態をフォールバック復元
+                    if len(A_raw) > 0:
+                        A = np.array(A_raw, dtype=float)
+                    else:
+                        prev_A = None
+                        prev_plan = plan
+                        prev_selectplans = selectplans
+                        for p_idx in range(self.current_index - 1, -1, -1):
+                            p_fr = self.logger.get_frame(p_idx)
+                            if p_fr and len(p_fr.get("A", [])) > 0:
+                                prev_A = np.array(p_fr["A"], dtype=float)
+                                if prev_plan is None:
+                                    prev_plan = p_fr.get("plan")
+                                if not prev_selectplans:
+                                    prev_selectplans = p_fr.get("selectplans", [])
+                                break
+                        if prev_A is not None:
+                            A = prev_A
+                            if num_nodes == 0:
+                                num_nodes = len(A)
+                        else:
+                            A = np.zeros(num_nodes, dtype=float)
+
+                        if plan is None:
+                            plan = prev_plan
+                        if not selectplans:
+                            selectplans = prev_selectplans
+
+                    # weight のフォールバック
+                    if len(weight_raw) > 0:
+                        weight = np.array(weight_raw, dtype=float)
+                    else:
+                        prev_weight = None
+                        for p_idx in range(self.current_index - 1, -1, -1):
+                            p_fr = self.logger.get_frame(p_idx)
+                            if p_fr and len(p_fr.get("weight", [])) > 0:
+                                prev_weight = np.array(p_fr["weight"], dtype=float)
+                                break
+                        if prev_weight is not None:
+                            weight = prev_weight
+                            if num_nodes == 0:
+                                num_nodes = len(weight)
+                        else:
+                            weight = np.zeros((num_nodes, num_nodes), dtype=float)
+
+                    if num_nodes == 0 and len(weight) > 0:
+                        num_nodes = len(weight)
 
                     # ノード位置の計算
                     node_positions = []
@@ -765,16 +817,70 @@ class SAPVisualizerGUI:
                         ny = net_center_y + int(net_radius * math.sin(angle))
                         node_positions.append((nx, ny))
 
-                    # エッジ（重み weight）の描画
+                    # エッジ（重み weight）の描画 ＆ 数値ラベルバッジ用データの収集
+                    edge_draw_list = []
                     if len(weight) == num_nodes and num_nodes > 0:
+                        non_zero_w = weight[weight > 0]
+                        min_w = float(np.min(non_zero_w)) if len(non_zero_w) > 0 else 0.0
+                        max_w = float(np.max(non_zero_w)) if len(non_zero_w) > 0 else 0.0
+
                         for i in range(num_nodes):
                             for j in range(i + 1, num_nodes):
-                                w_val = weight[i][j]
+                                w_val = float(weight[i][j])
                                 if w_val > 0:
-                                    thickness = max(1, min(6, int(8.0 / (w_val + 0.5))))
-                                    alpha_color = max(30, min(200, int(255 / (w_val + 0.1))))
-                                    color = (120, 140, 160)
+                                    if max_w > min_w:
+                                        # 重みの強弱に応じたスケーリング (0.0 〜 1.0)
+                                        ratio = (w_val - min_w) / (max_w - min_w)
+                                        thickness = 2 + int(ratio * 4)  # 2px 〜 6px
+                                        # 強化された重みは鮮やかなロイヤルブルー (35, 95, 215) 〜 濃紺 (10, 45, 175)
+                                        r_c = int(160 - ratio * 125)  # 160 -> 35
+                                        g_c = int(175 - ratio * 80)   # 175 -> 95
+                                        b_c = int(195 + ratio * 20)   # 195 -> 215
+                                        color = (max(0, min(255, r_c)), max(0, min(255, g_c)), max(0, min(255, b_c)))
+                                        is_enhanced = (ratio > 0.05)
+                                    else:
+                                        thickness = 2
+                                        color = (160, 175, 195)
+                                        is_enhanced = False
+
                                     pygame.draw.line(self.screen, color, node_positions[i], node_positions[j], thickness)
+                                    edge_draw_list.append((i, j, w_val, is_enhanced))
+
+                    # エッジ中央への重み数値ラベル（バッジ）の描画
+                    for (i, j, w_val, is_enhanced) in edge_draw_list:
+                        p1 = node_positions[i]
+                        p2 = node_positions[j]
+
+                        mid_x = (p1[0] + p2[0]) / 2.0
+                        mid_y = (p1[1] + p2[1]) / 2.0
+
+                        # 中心 (net_center_x, net_center_y) に近い交差エッジ（対角線等）は中点からずらして文字重複を防止
+                        dist_to_center = math.hypot(mid_x - net_center_x, mid_y - net_center_y)
+                        if dist_to_center < 30:
+                            badge_x = int(p1[0] + 0.35 * (p2[0] - p1[0]))
+                            badge_y = int(p1[1] + 0.35 * (p2[1] - p1[1]))
+                        else:
+                            badge_x = int(mid_x)
+                            badge_y = int(mid_y)
+
+                        # ラベル文字列（例: 5.0, 6.7）
+                        val_str = f"{w_val:.2f}".rstrip('0').rstrip('.') if '.' in f"{w_val:.2f}" else f"{w_val:.1f}"
+                        if "." not in val_str:
+                            val_str = f"{w_val:.1f}"
+
+                        t_surf = self.font_tiny.render(val_str, True, (15, 55, 140) if is_enhanced else (70, 80, 95))
+                        tw, th = t_surf.get_width(), t_surf.get_height()
+
+                        pad_x, pad_y = 4, 2
+                        badge_rect = pygame.Rect(badge_x - tw // 2 - pad_x, badge_y - th // 2 - pad_y, tw + pad_x * 2, th + pad_y * 2)
+
+                        bg_color = (235, 245, 255) if is_enhanced else (255, 255, 255)
+                        border_color = (35, 105, 215) if is_enhanced else (180, 190, 205)
+                        border_w = 2 if is_enhanced else 1
+
+                        pygame.draw.rect(self.screen, bg_color, badge_rect, border_radius=3)
+                        pygame.draw.rect(self.screen, border_color, badge_rect, border_w, border_radius=3)
+                        self.screen.blit(t_surf, (badge_x - tw // 2, badge_y - th // 2))
 
                     # ノードの描画
                     for i, (nx, ny) in enumerate(node_positions):
@@ -793,7 +899,7 @@ class SAPVisualizerGUI:
                             pygame.draw.circle(self.screen, (50, 205, 50), (nx, ny), 24)
 
                         pygame.draw.circle(self.screen, node_color, (nx, ny), 20)
-                        
+
                         n_txt = self.font_medium.render(str(i), True, (255, 255, 255))
                         n_rect = n_txt.get_rect(center=(nx, ny))
                         self.screen.blit(n_txt, n_rect)
@@ -1396,7 +1502,7 @@ class SAPVisualizerGUI:
                 pygame.draw.circle(self.screen, (220, 40, 40), (int(curr_x + 6), cy), 6)
                 self.screen.blit(txt_surf, (int(curr_x + 17), lg_y + 7))
             elif item_type == "weight_line":
-                pygame.draw.line(self.screen, (120, 140, 160), (int(curr_x), cy), (int(curr_x + 16), cy), 4)
+                pygame.draw.line(self.screen, (35, 95, 215), (int(curr_x), cy), (int(curr_x + 16), cy), 4)
                 self.screen.blit(txt_surf, (int(curr_x + 21), lg_y + 7))
                 
             curr_x += item_widths[i] + gap
@@ -1436,7 +1542,7 @@ class SAPVisualizerGUI:
             ("icon_gold", "選択中の知識 (金色二重枠)", "現在エージェントが実行に選択している知識"),
             ("icon_green", "転移候補知識 (緑色二重枠)", f"活性化基準(閾値 {thresh_val:.2f})を超えた転移候補知識"),
             ("icon_color", "ノードの色 (活性度 A)", "赤: 活性値の高い知識 A>=0.5 / 青: 非活性 A=0"),
-            ("icon_weight", "強い知識間重みの線", "太く濃い線ほど結合が強く強固"),
+            ("icon_weight", "強い知識間重みの線", "太く濃い青色の線ほど結合が強固（数値バッジ付き）"),
             ("icon_barchart", "活性値バーグラフ (右側)", "各知識の活性値 A のリアルタイムバーチャート"),
             ("icon_linechart", "活性値変動推移グラフ (Gキー)", "全知識の活性値の時系列変化を重ね合わせて表示"),
             ("icon_threshold", f"活性化閾値線 ({thresh_val:.2f})", f"活性化閾値 ({thresh_val:.2f}) の赤色線"),
@@ -1459,7 +1565,7 @@ class SAPVisualizerGUI:
                 pygame.draw.circle(self.screen, (220, 40, 40), (icon_cx - 5, icon_cy), 5)
                 pygame.draw.circle(self.screen, (40, 80, 200), (icon_cx + 5, icon_cy), 5)
             elif icon_type == "icon_weight":
-                pygame.draw.line(self.screen, (120, 140, 160), (icon_cx - 8, icon_cy), (icon_cx + 8, icon_cy), 4)
+                pygame.draw.line(self.screen, (35, 95, 215), (icon_cx - 8, icon_cy), (icon_cx + 8, icon_cy), 4)
             elif icon_type == "icon_barchart":
                 pygame.draw.rect(self.screen, (70, 130, 220), (icon_cx - 8, icon_cy - 4, 4, 10))
                 pygame.draw.rect(self.screen, (70, 130, 220), (icon_cx - 2, icon_cy - 8, 4, 14))
