@@ -39,7 +39,8 @@ class SAPVisualLogger:
                 max_n = len(f.activations)
             if len(f.weight_matrix) > max_n:
                 max_n = len(f.weight_matrix)
-        self.max_nodes = max(10, max_n)
+        self.max_nodes = max_n
+
 
         # 1. config_used_*.yaml から SAP.THRESHOLD を探索・取得 (最優先パラメータ)
         self.config_threshold = get_config_threshold(self.log_file_path)

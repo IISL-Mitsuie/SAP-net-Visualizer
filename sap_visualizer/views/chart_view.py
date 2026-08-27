@@ -48,8 +48,8 @@ class ChartView(BaseView):
         self.visible_nodes: Dict[int, bool] = {}
 
     def toggle_all_nodes(self, max_nodes: int, visible: bool = True) -> None:
-        """全知識の表示/非表示一括切り替え"""
-        for i in range(max(10, max_nodes)):
+        """全知識ノードの一括表示/非表示切り替え"""
+        for i in range(max_nodes):
             self.visible_nodes[i] = visible
 
     def toggle_node(self, node_index: int) -> None:
@@ -79,7 +79,8 @@ class ChartView(BaseView):
             )
         else:
             info_str = "活性値変動推移ビュー | ログ未読み込み"
-        self.draw_subheader_info(info_str, y_pos=46, max_width=660)
+        self.draw_subheader_info(info_str)
+
 
         chart_x, chart_y = self.chart_rect.x, self.chart_rect.y
         chart_w, chart_h = self.chart_rect.width, self.chart_rect.height

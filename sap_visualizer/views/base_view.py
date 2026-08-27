@@ -4,6 +4,7 @@ SAP-net Visualizer 描画基底クラス BaseView
 import pygame
 from typing import Dict, Any
 from ..theme import FONT_FAMILY_CANDIDATES, COLOR_TEXT_BODY
+from ..constants import SUBHEADER_Y, SUBHEADER_MAX_WIDTH
 
 
 class BaseView:
@@ -32,8 +33,14 @@ class BaseView:
             "title": pygame.font.SysFont(FONT_FAMILY_CANDIDATES, 18, bold=True),
         }
 
-    def draw_subheader_info(self, info_str: str, y_pos: int = 46, max_width: int = 660) -> None:
+    def draw_subheader_info(
+        self,
+        info_str: str,
+        y_pos: int = SUBHEADER_Y,
+        max_width: int = SUBHEADER_MAX_WIDTH
+    ) -> None:
         """サブヘッダー情報（フレーム・エピソード・ステップ等）をクリッピング＆長文時に水平動的自動スクロール描画"""
+
         info_surf = self.font_medium.render(info_str, True, COLOR_TEXT_BODY)
         txt_w = info_surf.get_width()
 

@@ -49,7 +49,8 @@ class StepView(BaseView):
             f"フレーム: {current_index}/{max(0, total_frames - 1)} | "
             f"エピソード: {ep} | ステップ: {st} | イベント: {ev} | 選択知識: {plan_disp}"
         )
-        self.draw_subheader_info(info_str, y_pos=46, max_width=660)
+        self.draw_subheader_info(info_str)
+
 
         # 2. ネットワーク構造の描画 (左側 400x450 領域)
         self._draw_network_graph(plan, selectplans, A_raw, weight_raw)
