@@ -14,6 +14,9 @@ SAP-net（Spreading Activation Policy Network）の動的パラメータ（知�
 
 - **超軽量＆高速起動**:
   - `numpy`, `pygame`, `pyyaml` の最小限の依存関係のみで動作し、ミリ秒単位で瞬時に起動します。
+- **シミュレーションフォルダ選択GUI＆履歴参照機能**:
+  - 起動時または実行中に専用のGUIウィンドウが開き、ファイルダイアログからの新規フォルダ選択に加え、過去に選択した実験ログフォルダの履歴一覧（最終アクセス日時・存在ステータス付き）からワンクリックで読み込み可能。
+  - 履歴の個別削除や全クリア、直接パス入力・コピペにも対応。
 - **2つの可視化モード（ワンキー `G` で瞬時に切替）**:
   - **ステップ詳細表示モード**:
     - 各知識ノードの活性度に応じた動的な円サイズ・カラー（青〜赤）表示。
@@ -154,6 +157,16 @@ Windows 環境において、専用のクリーンな一時仮想環境の作成
 
 ---
 
+## テストの実行
+
+Python 標準の `unittest` を用いて、全 17 件の単体・統合テストスイートを一括実行できます。
+
+```bash
+python -m unittest discover tests
+```
+
+---
+
 ## ディレクトリ構成
 
 ```text
@@ -175,10 +188,18 @@ SAP-net-Visualizer/
 ├── reference/                      # 各種技術リファレンス
 │   ├── SAP_VIEWER_MIGRATION_GUIDE.md   # 独立リポジトリ移行・構成ガイド
 │   └── SAP_VIEWER_PACKAGING_GUIDE.md   # アプリケーション化＆インストーラー作成ガイド
-└── sap_visualizer/                 # コア可視化パッケージ
+├── sap_visualizer/                 # コア可視化パッケージ
+│   ├── __init__.py
+│   ├── folder_selector_gui.py      # シミュレーションフォルダ選択GUI＆履歴管理モジュール
+│   ├── sap_visual_logger.py        # ログ解析・データ管理モジュール
+│   └── sap_visualizer_gui.py       # Pygame/Tkinter によるGUI描画エンジン
+└── tests/                          # 正規テストスイート
     ├── __init__.py
-    ├── sap_visual_logger.py        # ログ解析・データ管理モジュール
-    └── sap_visualizer_gui.py       # Pygame/Tkinter によるGUI描画エンジン
+    ├── test_logger.py              # ロガー単体テスト (解凍・パース・耐障害性・検索)
+    ├── test_history_manager.py     # 履歴管理単体テスト (LRU・JSON永続化・状態判定)
+    ├── test_folder_selector.py     # フォルダ選択GUIダイアログテスト (ライフサイクル・UI)
+    ├── test_visualizer_gui.py      # 可視化GUI単体テスト (ナビゲーション・コンフィグ)
+    └── test_integration.py         # 全体パイプライン統合テスト
 ```
 
 ---

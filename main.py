@@ -13,7 +13,7 @@ if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
 import pygame
-from sap_visualizer import SAPVisualLogger, SAPVisualizerGUI
+from sap_visualizer import SAPVisualLogger, SAPVisualizerGUI, FolderHistoryManager, select_simulation_folder
 
 def main():
     print("=" * 60)
@@ -21,8 +21,7 @@ def main():
     print("=" * 60)
     
     logger = SAPVisualLogger(enabled=True)
-    gui = SAPVisualizerGUI(logger)
-    gui.live_follow = False  # 保存ログ閲覧ビューアー起動時は手動再生・精査モードを標準とする
+    history_mgr = FolderHistoryManager()
     
     # コマンドライン引数のチェック
     target_path = None
@@ -32,13 +31,27 @@ def main():
     if target_path and os.path.exists(target_path):
         # シミュレーション連動起動やパス直接指定時
         if os.path.isdir(target_path):
-            logger.load_from_folder(target_path)
+            if logger.load_from_folder(target_path):
+                history_mgr.add_folder(target_path)
         else:
             logger.load_from_file(target_path)
+            history_mgr.add_folder(os.path.dirname(target_path))
     else:
-        # 直接起動時: 自動検索を行わず、起動直後にフォルダ選択ダイアログを自動表示
-        print("[INFO] Launching experiment log folder selection dialog...")
-        gui.open_folder_dialog()
+        # 直接起動時: フォルダ選択＆履歴ダイアログを表示
+        print("[INFO] Launching simulation folder selector dialog...")
+        selected_folder = select_simulation_folder()
+        if not selected_folder:
+            print("[INFO] Folder selection cancelled. Exiting SAP-net Visualizer.")
+            return
+
+        if logger.load_from_folder(selected_folder):
+            history_mgr.add_folder(selected_folder)
+        else:
+            print(f"[ERROR] Failed to load selected folder: {selected_folder}")
+
+    gui = SAPVisualizerGUI(logger)
+    gui.live_follow = False  # 保存ログ閲覧ビューアー起動時は手動再生・精査モードを標準とする
+
 
     print("\n--- 操作方法・キーボードショートカット ---")
     print("  G キー       : 画面表示モード切替（ステップ表示 ⇄ 活性値推移グラフ）")
