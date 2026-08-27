@@ -14,6 +14,8 @@ from .constants import (
     DEFAULT_WINDOW_WIDTH,
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_FPS,
+    SLIDER_X,
+    SLIDER_WIDTH,
     SLIDER_MARGIN_X,
     SLIDER_Y,
     SLIDER_HEIGHT,
@@ -101,8 +103,9 @@ class SAPVisualizerGUI:
         # UIレイアウト領域
         self.view_btn_rect = pygame.Rect(560, 10, 130, 30)
         self.header_btn_rect = pygame.Rect(700, 10, 200, 30)
-        self.slider_rect = pygame.Rect(SLIDER_MARGIN_X, SLIDER_Y, self.width - SLIDER_MARGIN_X * 2, SLIDER_HEIGHT)
+        self.slider_rect = pygame.Rect(SLIDER_X, SLIDER_Y, SLIDER_WIDTH, SLIDER_HEIGHT)
         self.is_dragging_slider = False
+
 
         self._setup_buttons()
 
@@ -557,6 +560,13 @@ class SAPVisualizerGUI:
             handle_rect = pygame.Rect(handle_x - 6, self.slider_rect.y - 3, 12, self.slider_rect.height + 6)
             pygame.draw.rect(self.screen, COLOR_SLIDER_HANDLE, handle_rect, border_radius=3)
             pygame.draw.rect(self.screen, (255, 255, 255), handle_rect, 1, border_radius=3)
+
+            # スライダー右側のフレーム進捗表示
+            pct = ratio * 100.0
+            slider_info_txt = f"{self.current_index + 1}/{total_frames} ({pct:.1f}%)"
+            slider_info_surf = self.fonts["small"].render(slider_info_txt, True, COLOR_TEXT_MUTED)
+            self.screen.blit(slider_info_surf, (self.slider_rect.right + 15, self.slider_rect.centery - slider_info_surf.get_height() // 2))
+
 
         # 4. ボタン群描画
         for btn in self.buttons:
