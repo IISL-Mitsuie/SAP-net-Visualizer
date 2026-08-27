@@ -20,6 +20,12 @@ try:
 except ImportError:
     HAS_TKINTER = False
 
+try:
+    from .folder_selector_gui import select_simulation_folder, FolderHistoryManager
+except ImportError:
+    from folder_selector_gui import select_simulation_folder, FolderHistoryManager
+
+
 class SAPVisualizerGUI:
     """
     SAP-netの動的パラメータをグラフィカルに表示し、
@@ -141,7 +147,7 @@ class SAPVisualizerGUI:
             curr_x2 += bw + gap2
 
     def open_folder_dialog(self):
-        """GUIのフォルダ選択ダイアログを開き、指定された実験ログフォルダから各種ファイルを一括読み込む"""
+        """GUIのシミュレーションフォルダ選択画面（履歴一覧・ファイルダイアログ）を開き、指定された実験ログフォルダから各種ファイルを一括読み込む"""
         if not HAS_TKINTER:
             print("[WARNING] Tkinter is not available for folder dialog.")
             return
@@ -150,14 +156,7 @@ class SAPVisualizerGUI:
         init_dir = os.path.dirname(log_filepath) if (log_filepath and os.path.exists(log_filepath)) else os.getcwd()
 
         try:
-            root = tk.Tk()
-            root.withdraw()  # メインウィンドウを非表示
-            root.attributes('-topmost', True)  # ダイアログを最前面に表示
-            folder_path = filedialog.askdirectory(
-                title="Select SAP Experiment Log Folder",
-                initialdir=init_dir
-            )
-            root.destroy()
+            folder_path = select_simulation_folder(initial_dir=init_dir)
 
             if folder_path:
                 if self.logger.load_from_folder(folder_path):
@@ -165,6 +164,13 @@ class SAPVisualizerGUI:
                     self.is_playing = False
                     self.live_follow = False  # フォルダ読み込み時は手動閲覧モードに
                     print(f"[INFO] Successfully loaded experiment folder: {folder_path}")
+
+                    # 選択履歴マネージャーへ保存
+                    try:
+                        history_mgr = FolderHistoryManager()
+                        history_mgr.add_folder(folder_path)
+                    except Exception as h_err:
+                        print(f"[WARNING] Could not save folder to history: {h_err}")
 
                     # ハイパーパラメータ設定ファイル (config_used_*.yaml) の存在・読み込みチェック
                     _, yaml_loaded = self.load_config_data(return_status=True)
