@@ -3,7 +3,12 @@ import unittest
 import tempfile
 import shutil
 import yaml
-from sap_visualizer.config_loader import load_config_data, get_param_description
+from sap_visualizer.config_loader import (
+    load_config_data,
+    load_raw_config,
+    get_config_threshold,
+    get_param_description,
+)
 
 
 class TestConfigLoader(unittest.TestCase):
@@ -20,7 +25,7 @@ class TestConfigLoader(unittest.TestCase):
                 "MAX_STEPS": 1000
             },
             "SAP": {
-                "THRESHOLD": 0.18,
+                "THRESHOLD": 0.15,
                 "ATTENUATION": 0.05
             }
         }
@@ -41,6 +46,15 @@ class TestConfigLoader(unittest.TestCase):
         self.assertIn("EXPERIMENT.MAX_EPISODES", param_names)
         self.assertIn("SAP.THRESHOLD", param_names)
 
+        # 生の辞書取得テスト
+        raw_cfg = load_raw_config(dummy_log_path)
+        self.assertIsNotNone(raw_cfg)
+        self.assertEqual(raw_cfg["SAP"]["THRESHOLD"], 0.15)
+
+        # SAP.THRESHOLD 抽出テスト
+        thresh = get_config_threshold(dummy_log_path)
+        self.assertEqual(thresh, 0.15)
+
     def test_load_config_without_yaml(self):
         dummy_log_path = os.path.join(self.test_dir, "sap_dynamic_log.jsonl.gz")
         with open(dummy_log_path, "w") as f:
@@ -53,6 +67,9 @@ class TestConfigLoader(unittest.TestCase):
         self.assertEqual(items[0][0], "CONFIG_STATUS")
         self.assertEqual(items[0][1], "未読み込み")
 
+        self.assertIsNone(load_raw_config(dummy_log_path))
+        self.assertIsNone(get_config_threshold(dummy_log_path))
+
     def test_get_param_description(self):
         desc = get_param_description("SAP", "THRESHOLD")
         self.assertIn("閾値", desc)
@@ -63,3 +80,4 @@ class TestConfigLoader(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

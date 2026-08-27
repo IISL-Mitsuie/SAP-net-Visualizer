@@ -8,7 +8,8 @@ import glob
 import logging
 from typing import List, Optional
 from .models import LogFrame, ResolvedFrameInfo
-from .constants import EventType
+from .constants import EventType, DEFAULT_THRESHOLD
+from .config_loader import get_config_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,13 @@ class SAPVisualLogger:
         self.history: List[LogFrame] = []
         self.log_file_path: Optional[str] = None
         self.max_nodes: int = 0
+        self.config_threshold: Optional[float] = None
+        self.dominant_threshold: Optional[float] = None
         self.last_error_msg: str = ""
         self.last_missing_file_type: str = ""
 
     def _update_metadata_cache(self) -> None:
-        """ログ読み込み完了時にメタデータ（最大ノード数等）を1度だけ計算してキャッシュ"""
+        """ログ読み込み完了時にメタデータ（最大ノード数、パラメータ閾値等）を計算してキャッシュ"""
         max_n = 0
         for f in self.history:
             if len(f.activations) > max_n:
@@ -37,6 +40,31 @@ class SAPVisualLogger:
             if len(f.weight_matrix) > max_n:
                 max_n = len(f.weight_matrix)
         self.max_nodes = max(10, max_n)
+
+        # 1. config_used_*.yaml から SAP.THRESHOLD を探索・取得 (最優先パラメータ)
+        self.config_threshold = get_config_threshold(self.log_file_path)
+
+        # 2. ログ内の STEP イベント行から基準 threshold を検出 (イベント行デフォルト値とのブレ防止)
+        self.dominant_threshold = None
+        if self.history:
+            for f in self.history:
+                if f.event_type == EventType.STEP and f.threshold is not None:
+                    self.dominant_threshold = f.threshold
+                    break
+            if self.dominant_threshold is None and self.history:
+                self.dominant_threshold = self.history[0].threshold
+
+    @property
+    def active_threshold(self) -> float:
+        """現在アクティブな基準活性化閾値 (float)"""
+        if self.config_threshold is not None:
+            return self.config_threshold
+        if self.dominant_threshold is not None:
+            return self.dominant_threshold
+        if self.history and self.history[0].threshold is not None:
+            return self.history[0].threshold
+        return DEFAULT_THRESHOLD
+
 
     def load_from_file(self, log_file_path: str) -> bool:
         """
@@ -200,6 +228,14 @@ class SAPVisualLogger:
                     selectplans = prev_sel
                     break
 
+        # 5. 活性化閾値 threshold の決定（設定ファイルパラメータ最優先 ＆ ログ内一貫性の保証）
+        if self.config_threshold is not None:
+            threshold = self.config_threshold
+        elif self.dominant_threshold is not None:
+            threshold = self.dominant_threshold
+        else:
+            threshold = frame.threshold
+
         return ResolvedFrameInfo(
             plan=plan,
             selectplans=selectplans,
@@ -210,6 +246,7 @@ class SAPVisualLogger:
             event_type=event_type,
             threshold=threshold
         )
+
 
     def find_next_event_index(self, current_index: int, event_type: str) -> int:
         """指定したイベント種別の次のフレームインデックスを検索"""

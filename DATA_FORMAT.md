@@ -73,8 +73,9 @@ experiment_logs/
 | `weight` | `list[list[float]]` | 推奨 | 知識ノード間の重み行列 ($N \times N$) | 結合線の太さ・カラー強調および数値バッジ表示に反映 |
 | `plan` | `int` \| `null` | 推奨 | 現在選択・実行中の知識ノード番号 | GUI上で金色二重枠でハイライト |
 | `selectplans` | `list[int]` | 推奨 | 活性化閾値を超えた転移候補知識フラグ (0/1配列) | GUI上で緑色二重枠でハイライト |
-| `threshold` | `float` | 推奨 | 知識活性化・転移判断の評価閾値 | 未指定時は `0.18` |
+| `threshold` | `float` | 推奨 | 知識活性化・転移判断の評価閾値 | 未指定時は `0.18`（※実験フォルダ内の `config_used_*.yaml` に `SAP.THRESHOLD` がある場合はそのパラメータ設定値が一貫して最優先適用されます） |
 | `policyvalue` | `list[float]` | 任意 | 各知識の価値評価値 (Q値や転移評価値) | 知識ノード情報補足 |
+
 | `reused_action` | `int` \| `null` | 任意 | 転移再利用された行動ID | 動作ログ補足 |
 
 ---

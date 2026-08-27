@@ -69,16 +69,12 @@ def get_param_description(section: str, key: str) -> str:
     return PARAM_DESCRIPTIONS.get(full_key, "詳細不明（未定義パラメータ）")
 
 
-def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Tuple[str, str, str]], bool]:
+def load_raw_config(log_file_path: Optional[str] = None) -> Optional[dict]:
     """
-    ログファイルのあるディレクトリから config_used_*.yaml を探索・パースして返す。
-    
-    戻り値:
-        Tuple[List[Tuple[パラメータ名, 設定値, 日本語説明]], yaml_loaded(bool)]
+    ログファイルのあるディレクトリから config_used_*.yaml を探索し、生の dict として読み込んで返す。
     """
-    config_items: List[Tuple[str, str, str]] = []
     if not log_file_path or not os.path.exists(log_file_path):
-        return [("CONFIG_STATUS", "未読み込み", "実験ログフォルダ内の config_used_*.yaml は検出されていません")], False
+        return None
 
     log_dir = os.path.dirname(os.path.abspath(log_file_path))
     yaml_files = [
@@ -88,24 +84,78 @@ def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Tuple[st
     ]
 
     if not yaml_files:
-        return [("CONFIG_STATUS", "未読み込み", "フォルダ内に config_used_*.yaml が存在しません")], False
+        return None
 
     try:
         import yaml
         with open(yaml_files[0], mode="r", encoding="utf-8") as f:
             raw_yaml = yaml.safe_load(f)
             if isinstance(raw_yaml, dict):
-                for section, params in raw_yaml.items():
-                    if isinstance(params, dict):
-                        for key, val in params.items():
-                            v_str = str(val).strip().replace("\n", "") if val is not None else ""
-                            if not v_str or v_str.lower() in ("none", "null", "nan", "empty", "[]", "{}"):
-                                v_str = "-"
-                            desc = get_param_description(section, key)
-                            config_items.append((f"{section}.{key}".upper(), v_str, desc))
-                if config_items:
-                    return config_items, True
+                return raw_yaml
     except Exception as e:
-        logger.warning(f"Failed to parse YAML config file ({yaml_files[0]}): {e}")
+        logger.warning(f"Failed to load raw YAML config file ({yaml_files[0]}): {e}")
 
-    return [("CONFIG_STATUS", "パース失敗", f"設定ファイル ({os.path.basename(yaml_files[0])}) の解析に失敗しました")], False
+    return None
+
+
+def get_config_threshold(log_file_path: Optional[str] = None) -> Optional[float]:
+    """
+    config_used_*.yaml から SAP.THRESHOLD を float として取得。見つからない場合は None。
+    """
+    config = load_raw_config(log_file_path)
+    if not config or not isinstance(config, dict):
+        return None
+
+    # 大文字小文字の揺らぎを吸収
+    sap_sec = None
+    for k, v in config.items():
+        if isinstance(k, str) and k.upper() == "SAP" and isinstance(v, dict):
+            sap_sec = v
+            break
+
+    if sap_sec:
+        for k, v in sap_sec.items():
+            if isinstance(k, str) and k.upper() == "THRESHOLD" and v is not None:
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
+
+    return None
+
+
+def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Tuple[str, str, str]], bool]:
+    """
+    ログファイルのあるディレクトリから config_used_*.yaml を探索・パースして返す。
+    
+    戻り値:
+        Tuple[List[Tuple[パラメータ名, 設定値, 日本語説明]], yaml_loaded(bool)]
+    """
+    config_items: List[Tuple[str, str, str]] = []
+    raw_yaml = load_raw_config(log_file_path)
+    if raw_yaml is None:
+        if not log_file_path or not os.path.exists(log_file_path):
+            return [("CONFIG_STATUS", "未読み込み", "実験ログフォルダ内の config_used_*.yaml は検出されていません")], False
+        log_dir = os.path.dirname(os.path.abspath(log_file_path))
+        yaml_files = [
+            os.path.join(log_dir, f)
+            for f in os.listdir(log_dir)
+            if f.startswith("config_used") and f.endswith(".yaml")
+        ]
+        if not yaml_files:
+            return [("CONFIG_STATUS", "未読み込み", "フォルダ内に config_used_*.yaml が存在しません")], False
+        return [("CONFIG_STATUS", "パース失敗", f"設定ファイル ({os.path.basename(yaml_files[0])}) の解析に失敗しました")], False
+
+    for section, params in raw_yaml.items():
+        if isinstance(params, dict):
+            for key, val in params.items():
+                v_str = str(val).strip().replace("\n", "") if val is not None else ""
+                if not v_str or v_str.lower() in ("none", "null", "nan", "empty", "[]", "{}"):
+                    v_str = "-"
+                desc = get_param_description(section, key)
+                config_items.append((f"{section}.{key}".upper(), v_str, desc))
+    if config_items:
+        return config_items, True
+
+    return [("CONFIG_STATUS", "パース失敗", "設定ファイルの解析に失敗しました")], False
+
