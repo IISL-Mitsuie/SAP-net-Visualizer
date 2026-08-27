@@ -1,9 +1,32 @@
+"""
+SAP-net Visualizer フォルダ選択GUIダイアログ ＆ フォルダ履歴管理モジュール
+"""
 import os
 import sys
 import json
 import glob
 import datetime
+import logging
 from typing import List, Dict, Optional, Tuple
+
+from .theme import (
+    TK_BG_MAIN,
+    TK_BG_CARD,
+    TK_BG_HEADER,
+    TK_BORDER_COLOR,
+    TK_TEXT_TITLE,
+    TK_TEXT_BODY,
+    TK_TEXT_MUTED,
+    TK_TEXT_PLACEHOLDER,
+    TK_ACCENT_BLUE,
+    TK_ACCENT_BLUE_HOVER,
+    TK_STATUS_OK_FG,
+    TK_STATUS_WARN_FG,
+    TK_STATUS_ERR_FG,
+)
+from .utils.resource_utils import get_resource_path
+
+logger = logging.getLogger(__name__)
 
 try:
     import tkinter as tk
@@ -16,7 +39,7 @@ except ImportError:
 class FolderHistoryManager:
     """
     SAP-netシミュレーションログフォルダの選択履歴を管理・永続化するクラス。
-    ユーザー設定ディレクトリ（例: ~/.sap_visualizer/folder_history.json）にJSON形式で保存します。
+    ユーザー設定ディレクトリ（~/.sap_visualizer/folder_history.json）にJSON形式で保存。
     """
     def __init__(self, history_file: Optional[str] = None, max_history: int = 30):
         self.max_history = max_history
@@ -51,17 +74,11 @@ class FolderHistoryManager:
                     raw_list = []
 
                 for item in raw_list:
-                    if isinstance(item, str):
-                        self.history.append({
-                            "path": os.path.abspath(item),
-                            "last_opened": "",
-                            "note": ""
-                        })
-                    elif isinstance(item, dict) and "path" in item:
+                    if isinstance(item, dict) and "path" in item:
                         item["path"] = os.path.abspath(item["path"])
                         self.history.append(item)
         except Exception as e:
-            print(f"[WARNING] Failed to load folder history: {e}")
+            logger.warning(f"Failed to load folder history: {e}")
             self.history = []
 
         return self.history
@@ -79,7 +96,7 @@ class FolderHistoryManager:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"[WARNING] Failed to save folder history: {e}")
+            logger.warning(f"Failed to save folder history: {e}")
             return False
 
     def add_folder(self, folder_path: str, note: str = "") -> None:
@@ -161,25 +178,24 @@ class FolderSelectorDialog:
     SAP-netシミュレーションログフォルダの選択・履歴参照を行うGUIダイアログ
     （SAP-net Visualizer のダークブルー＆ソフトグレーの統一モダンデザイン）
     """
-    # 統一カラーパレット定義
-    BG_MAIN = "#f0f3f6"         # メインウィンドウ背景色
-    BG_CARD = "#ffffff"         # カード・入力コンテナ背景色
-    BG_HEADER = "#e4ebf3"       # テーブルヘッダー背景色
-    BORDER_COLOR = "#becde1"    # 枠線色
-    BORDER_FOCUS = "#2864b4"    # フォーカス時枠線色
+    BG_MAIN = TK_BG_MAIN
+    BG_CARD = TK_BG_CARD
+    BG_HEADER = TK_BG_HEADER
+    BORDER_COLOR = TK_BORDER_COLOR
+    BORDER_FOCUS = "#2864b4"
     
-    TEXT_TITLE = "#14284b"      # タイトル文字色（濃紺）
-    TEXT_BODY = "#1e3250"       # 本文文字色
-    TEXT_MUTED = "#5a738e"      # 補足・注釈文字色
-    TEXT_PLACEHOLDER = "#8c9ba5"# プレースホルダー色
+    TEXT_TITLE = TK_TEXT_TITLE
+    TEXT_BODY = TK_TEXT_BODY
+    TEXT_MUTED = TK_TEXT_MUTED
+    TEXT_PLACEHOLDER = TK_TEXT_PLACEHOLDER
     
-    ACCENT_BLUE = "#1e50a2"     # プライマリボタン背景（深青）
-    ACCENT_BLUE_HOVER = "#143c7d"
+    ACCENT_BLUE = TK_ACCENT_BLUE
+    ACCENT_BLUE_HOVER = TK_ACCENT_BLUE_HOVER
     ACCENT_BORDER = "#3c78c8"
     
-    STATUS_OK_FG = "#146428"     # 正常テキスト（緑）
-    STATUS_WARN_FG = "#a05a00"   # 警告テキスト（琥珀）
-    STATUS_ERR_FG = "#888888"    # 不存在テキスト（灰）
+    STATUS_OK_FG = TK_STATUS_OK_FG
+    STATUS_WARN_FG = TK_STATUS_WARN_FG
+    STATUS_ERR_FG = TK_STATUS_ERR_FG
 
     def __init__(self, initial_dir: Optional[str] = None, history_manager: Optional[FolderHistoryManager] = None):
         self.selected_folder: Optional[str] = None
@@ -199,7 +215,7 @@ class FolderSelectorDialog:
         キャンセルされた場合は None を返す。
         """
         if not HAS_TKINTER:
-            print("[WARNING] Tkinter is not available.")
+            logger.warning("Tkinter is not available.")
             return None
 
         self.root = tk.Tk()
@@ -209,18 +225,12 @@ class FolderSelectorDialog:
         self.root.configure(bg=self.BG_MAIN)
 
         # アイコンの設定
-        icon_paths = [
-            os.path.join(os.path.dirname(__file__), "..", "packaging", "app_icon.ico"),
-            os.path.join(os.path.dirname(__file__), "packaging", "app_icon.ico"),
-            os.path.join(os.getcwd(), "packaging", "app_icon.ico"),
-        ]
-        for ip in icon_paths:
-            if os.path.exists(ip):
-                try:
-                    self.root.iconbitmap(ip)
-                    break
-                except Exception:
-                    pass
+        icon_path = get_resource_path(os.path.join("packaging", "app_icon.ico"))
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
 
         # 画面中央に配置
         self.root.update_idletasks()
@@ -238,462 +248,455 @@ class FolderSelectorDialog:
         except Exception:
             pass
 
-        # 全体共通フォント設定
         font_family = "Meiryo UI"
         style.configure(".", font=(font_family, 9), background=self.BG_MAIN, foreground=self.TEXT_BODY)
         
-        # Frame
         style.configure("Main.TFrame", background=self.BG_MAIN)
         style.configure("Card.TFrame", background=self.BG_CARD, relief="solid", borderwidth=1)
         
-        # Treeview (履歴テーブル)
         style.configure(
-            "Custom.Treeview.Heading",
+            "Treeview.Heading",
             font=(font_family, 9, "bold"),
             background=self.BG_HEADER,
             foreground=self.TEXT_TITLE,
             relief="flat",
-            padding=5
+            padding=6
         )
-        style.map("Custom.Treeview.Heading", background=[("active", "#d5e2f0")])
+        style.map("Treeview.Heading", background=[("active", "#d2e0f0")])
+        
         style.configure(
-            "Custom.Treeview",
+            "Treeview",
             font=(font_family, 9),
             background=self.BG_CARD,
-            fieldbackground=self.BG_CARD,
             foreground=self.TEXT_BODY,
-            rowheight=25,
-            relief="solid",
-            borderwidth=1
+            fieldbackground=self.BG_CARD,
+            rowheight=26,
+            borderwidth=0
         )
         style.map(
-            "Custom.Treeview",
-            background=[("selected", "#d2e4f8")],
-            foreground=[("selected", "#0a2850")]
+            "Treeview",
+            background=[("selected", "#d5e5f8")],
+            foreground=[("selected", self.TEXT_TITLE)]
         )
 
-        # ボタンのスタイル定義
         style.configure(
-            "Primary.TButton",
-            font=(font_family, 9, "bold"),
+            "Custom.Horizontal.TProgressbar",
+            troughcolor=self.BG_MAIN,
             background=self.ACCENT_BLUE,
-            foreground="#ffffff",
-            borderwidth=0,
-            padding=(16, 6)
-        )
-        style.map(
-            "Primary.TButton",
-            background=[("active", self.ACCENT_BLUE_HOVER), ("pressed", "#0f2d5e")],
-            foreground=[("active", "#ffffff")]
+            bordercolor=self.BORDER_COLOR,
+            lightcolor=self.ACCENT_BLUE,
+            darkcolor=self.ACCENT_BLUE
         )
 
-        style.configure(
-            "Secondary.TButton",
-            font=(font_family, 9),
-            background="#ffffff",
-            foreground=self.ACCENT_BLUE,
-            relief="solid",
-            borderwidth=1,
-            padding=(12, 5)
-        )
-        style.map(
-            "Secondary.TButton",
-            background=[("active", "#e8f0fe"), ("pressed", "#d2e3fc")],
-            foreground=[("active", "#103875")]
-        )
+        self._build_ui(font_family)
 
-        style.configure(
-            "Danger.TButton",
-            font=(font_family, 9),
-            background="#ffffff",
-            foreground="#b91c1c",
-            relief="solid",
-            borderwidth=1,
-            padding=(10, 5)
-        )
-        style.map(
-            "Danger.TButton",
-            background=[("active", "#fee2e2"), ("pressed", "#fecaca")],
-            foreground=[("active", "#991b1b")]
-        )
-
-        # メインフレーム
-        main_frame = ttk.Frame(self.root, style="Main.TFrame", padding="16 12 16 12")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # ----------------------------------------------------
-        # 1. ヘッダーエリア（タイトル ＆ サブテキスト）
-        # ----------------------------------------------------
-        header_frame = tk.Frame(main_frame, bg=self.BG_MAIN)
-        header_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
-
-        title_label = tk.Label(
-            header_frame,
-            text="SAP-net 実験ログフォルダ選択",
-            font=(font_family, 12, "bold"),
-            bg=self.BG_MAIN,
-            fg=self.TEXT_TITLE
-        )
-        title_label.pack(anchor=tk.W)
-
-        subtitle_label = tk.Label(
-            header_frame,
-            text="可視化対象のシミュレーションログ（*.jsonl.gz / *.jsonl）が格納されたフォルダを指定してください。",
-            font=(font_family, 9),
-            bg=self.BG_MAIN,
-            fg=self.TEXT_MUTED
-        )
-        subtitle_label.pack(anchor=tk.W, pady=(2, 0))
-
-        # 区切りライン
-        sep_line = tk.Frame(main_frame, height=2, bg=self.BORDER_COLOR)
-        sep_line.pack(side=tk.TOP, fill=tk.X, pady=(0, 8))
-
-        # ----------------------------------------------------
-        # 2. フォルダ指定入力カード
-        # ----------------------------------------------------
-        input_card = tk.Frame(main_frame, bg=self.BG_CARD, highlightbackground=self.BORDER_COLOR, highlightthickness=1, padx=12, pady=8)
-        input_card.pack(side=tk.TOP, fill=tk.X, pady=(0, 8))
-
-        lbl_folder_title = tk.Label(
-            input_card,
-            text="フォルダパス指定",
-            font=(font_family, 9, "bold"),
-            bg=self.BG_CARD,
-            fg=self.TEXT_TITLE
-        )
-        lbl_folder_title.pack(anchor=tk.W, pady=(0, 4))
-
-        entry_row = tk.Frame(input_card, bg=self.BG_CARD)
-        entry_row.pack(fill=tk.X)
-
-        self.path_var = tk.StringVar(value="")
-        self.entry_path = tk.Entry(
-            entry_row,
-            textvariable=self.path_var,
-            font=(font_family, 9),
-            bg="#fdfefe",
-            fg=self.TEXT_PLACEHOLDER,
-            relief=tk.SOLID,
-            bd=1,
-            highlightthickness=1,
-            highlightcolor=self.BORDER_FOCUS,
-            highlightbackground="#d0dbe8"
-        )
-        self.entry_path.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8), ipady=4)
-
-        self.entry_path.bind("<FocusIn>", self._on_entry_focus_in)
-        self.entry_path.bind("<FocusOut>", self._on_entry_focus_out)
-
-        btn_browse = ttk.Button(entry_row, text="参照 (Browse)...", style="Secondary.TButton", command=self._on_browse)
-        btn_browse.pack(side=tk.RIGHT)
-
-        # 初期プレースホルダー適用
-        self._apply_placeholder()
-
-        # ----------------------------------------------------
-        # 3. フッター・アクションボタンエリア（※下部に固定配置）
-        # ----------------------------------------------------
-        bottom_frame = tk.Frame(main_frame, bg=self.BG_MAIN)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-
-        # 左側ボタン（履歴管理）
-        btn_delete = ttk.Button(bottom_frame, text="履歴から削除", style="Secondary.TButton", command=self._on_delete_selected)
-        btn_delete.pack(side=tk.LEFT, padx=(0, 6))
-
-        btn_clear = ttk.Button(bottom_frame, text="全履歴クリア", style="Danger.TButton", command=self._on_clear_all)
-        btn_clear.pack(side=tk.LEFT)
-
-        # 右側ボタン（アクション）
-        btn_cancel = ttk.Button(bottom_frame, text="キャンセル (Esc)", style="Secondary.TButton", command=self._on_cancel)
-        btn_cancel.pack(side=tk.RIGHT, padx=(8, 0))
-
-        btn_open = ttk.Button(bottom_frame, text="開く (Open)", style="Primary.TButton", command=self._on_confirm)
-        btn_open.pack(side=tk.RIGHT)
-
-        # ----------------------------------------------------
-        # 4. 最近選択したフォルダ履歴カード（中央領域を可変拡張）
-        # ----------------------------------------------------
-        history_card = tk.Frame(main_frame, bg=self.BG_CARD, highlightbackground=self.BORDER_COLOR, highlightthickness=1, padx=12, pady=8)
-        history_card.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        history_title_row = tk.Frame(history_card, bg=self.BG_CARD)
-        history_title_row.pack(fill=tk.X, pady=(0, 4))
-
-        lbl_history_title = tk.Label(
-            history_title_row,
-            text="最近選択した実験ログフォルダの履歴 (Recent Folders)",
-            font=(font_family, 9, "bold"),
-            bg=self.BG_CARD,
-            fg=self.TEXT_TITLE
-        )
-        lbl_history_title.pack(side=tk.LEFT)
-
-        lbl_history_hint = tk.Label(
-            history_title_row,
-            text="※ ダブルクリックまたは Enter で即座に開きます",
-            font=(font_family, 8),
-            bg=self.BG_CARD,
-            fg=self.TEXT_MUTED
-        )
-        lbl_history_hint.pack(side=tk.RIGHT)
-
-        # Treeview + Scrollbars コンテナ
-        tree_container = tk.Frame(history_card, bg=self.BG_CARD)
-        tree_container.pack(fill=tk.BOTH, expand=True)
-
-        columns = ("folder_name", "last_opened", "status", "path")
-        self.tree = ttk.Treeview(
-            tree_container,
-            columns=columns,
-            show="headings",
-            selectmode="browse",
-            style="Custom.Treeview",
-            height=8
-        )
-
-        self.tree.heading("folder_name", text="フォルダ名", anchor=tk.W)
-        self.tree.heading("last_opened", text="最終アクセス日時", anchor=tk.W)
-        self.tree.heading("status", text="状態", anchor=tk.CENTER)
-        self.tree.heading("path", text="フルパス", anchor=tk.W)
-
-        self.tree.column("folder_name", width=180, minwidth=110, anchor=tk.W)
-        self.tree.column("last_opened", width=140, minwidth=120, anchor=tk.W)
-        self.tree.column("status", width=120, minwidth=90, anchor=tk.CENTER)
-        self.tree.column("path", width=340, minwidth=180, anchor=tk.W)
-
-        vsb = ttk.Scrollbar(tree_container, orient=tk.VERTICAL, command=self.tree.yview)
-        hsb = ttk.Scrollbar(tree_container, orient=tk.HORIZONTAL, command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        tree_container.rowconfigure(0, weight=1)
-        tree_container.columnconfigure(0, weight=1)
-
-        # イベントバインド
-        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-        self.tree.bind("<Double-1>", self._on_tree_double_click)
-        self.tree.bind("<Return>", lambda e: self._on_confirm())
-        self.tree.bind("<Delete>", lambda e: self._on_delete_selected())
+        self.root.bind("<Return>", lambda e: self._on_select())
         self.root.bind("<Escape>", lambda e: self._on_cancel())
 
-        # 履歴データの読み込み・描画
-        self._refresh_tree()
-
-        # 初期フォーカス設定
-        self.tree.focus_set()
-
-        # ウィンドウ終了ハンドラ
         self.root.protocol("WM_DELETE_WINDOW", self._on_cancel)
         self.root.mainloop()
 
         return self.selected_folder
 
-    def _apply_placeholder(self):
-        """プレースホルダー（半透明・グレー文字）を適用"""
-        self.placeholder_active = True
-        if self.path_var is not None:
-            self.path_var.set(self.placeholder_text)
-        if self.entry_path is not None:
-            self.entry_path.config(fg=self.TEXT_PLACEHOLDER)
+    def _build_ui(self, font_family: str) -> None:
+        """UIコンポーネントの構築"""
+        container = tk.Frame(self.root, bg=self.BG_MAIN, padx=20, pady=16)
+        container.pack(fill=tk.BOTH, expand=True)
 
-    def _clear_placeholder(self):
-        """プレースホルダーを解除して通常編集状態にする"""
-        if self.placeholder_active:
-            self.placeholder_active = False
-            if self.path_var is not None:
-                self.path_var.set("")
-            if self.entry_path is not None:
-                self.entry_path.config(fg=self.TEXT_BODY)
+        header_frame = tk.Frame(container, bg=self.BG_MAIN)
+        header_frame.pack(fill=tk.X, pady=(0, 14))
 
-    def _set_entry_path(self, path_str: str):
-        """パス文字列を入力欄に確実に設定（通常文字色）"""
-        self.placeholder_active = False
-        if self.path_var is not None:
-            self.path_var.set(path_str)
-        if self.entry_path is not None:
-            self.entry_path.config(fg=self.TEXT_BODY)
+        title_lbl = tk.Label(
+            header_frame,
+            text="SAP-net 実験ログフォルダの選択",
+            font=(font_family, 14, "bold"),
+            bg=self.BG_MAIN,
+            fg=self.TEXT_TITLE
+        )
+        title_lbl.pack(anchor="w")
 
-    def _get_entry_path(self) -> str:
-        """入力欄から有効なパスを取得（プレースホルダー表示時は空文字を返す）"""
-        if self.placeholder_active:
-            return ""
-        if self.path_var is None:
-            return ""
-        return self.path_var.get().strip()
+        desc_lbl = tk.Label(
+            header_frame,
+            text="可視化するSAP動的ログファイル (*.jsonl.gz / *.jsonl) が格納されている実験ディレクトリを選択してください。",
+            font=(font_family, 9),
+            bg=self.BG_MAIN,
+            fg=self.TEXT_MUTED
+        )
+        desc_lbl.pack(anchor="w", pady=(2, 0))
 
-    def _on_entry_focus_in(self, event):
-        """入力欄フォーカス取得時"""
-        if self.placeholder_active:
-            self._clear_placeholder()
+        # フォルダ選択コンテナ
+        sel_card = tk.Frame(
+            container,
+            bg=self.BG_CARD,
+            bd=1,
+            relief="solid",
+            highlightbackground=self.BORDER_COLOR,
+            highlightthickness=1,
+            padx=14,
+            pady=12
+        )
+        sel_card.pack(fill=tk.X, pady=(0, 14))
 
-    def _on_entry_focus_out(self, event):
-        """入力欄フォーカス喪失時"""
-        if not self.path_var.get().strip():
-            self._apply_placeholder()
+        sel_label = tk.Label(
+            sel_card,
+            text="対象フォルダパス:",
+            font=(font_family, 9, "bold"),
+            bg=self.BG_CARD,
+            fg=self.TEXT_TITLE
+        )
+        sel_label.pack(anchor="w", pady=(0, 6))
 
-    def _refresh_tree(self):
-        """Treeviewの表示を更新"""
+        input_row = tk.Frame(sel_card, bg=self.BG_CARD)
+        input_row.pack(fill=tk.X)
+
+        self.path_var = tk.StringVar()
+        self.entry_path = tk.Entry(
+            input_row,
+            textvariable=self.path_var,
+            font=(font_family, 9),
+            bg="#fdfefe",
+            fg=self.TEXT_PLACEHOLDER,
+            relief="solid",
+            bd=1,
+            highlightthickness=1,
+            highlightcolor=self.BORDER_FOCUS,
+            highlightbackground=self.BORDER_COLOR
+        )
+        self.entry_path.insert(0, self.placeholder_text)
+        self.entry_path.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4, padx=(0, 8))
+
+        self.entry_path.bind("<FocusIn>", self._on_entry_focus_in)
+        self.entry_path.bind("<FocusOut>", self._on_entry_focus_out)
+        self.path_var.trace_add("write", self._on_path_changed)
+
+        browse_btn = tk.Button(
+            input_row,
+            text="参照 (Browse)...",
+            font=(font_family, 9),
+            bg="#eef3f8",
+            fg=self.TEXT_TITLE,
+            activebackground="#dbe7f4",
+            relief="groove",
+            bd=1,
+            padx=12,
+            pady=3,
+            cursor="hand2",
+            command=self._on_browse
+        )
+        browse_btn.pack(side=tk.RIGHT)
+
+        self.status_bar_card = tk.Label(
+            sel_card,
+            text="",
+            font=(font_family, 8),
+            bg=self.BG_CARD,
+            fg=self.TEXT_MUTED
+        )
+        self.status_bar_card.pack(anchor="w", pady=(6, 0))
+
+        # 履歴テーブルコンテナ
+        hist_card = tk.Frame(
+            container,
+            bg=self.BG_CARD,
+            bd=1,
+            relief="solid",
+            highlightbackground=self.BORDER_COLOR,
+            highlightthickness=1,
+            padx=14,
+            pady=12
+        )
+        hist_card.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
+
+        hist_header = tk.Frame(hist_card, bg=self.BG_CARD)
+        hist_header.pack(fill=tk.X, pady=(0, 8))
+
+        hist_title = tk.Label(
+            hist_header,
+            text="最近開いた実験ログフォルダ (履歴一覧)",
+            font=(font_family, 9, "bold"),
+            bg=self.BG_CARD,
+            fg=self.TEXT_TITLE
+        )
+        hist_title.pack(side=tk.LEFT)
+
+        del_btn = tk.Button(
+            hist_header,
+            text="選択項目を履歴から削除",
+            font=(font_family, 8),
+            bg="#fdf0f0",
+            fg="#a02020",
+            activebackground="#fadcdc",
+            relief="groove",
+            bd=1,
+            padx=8,
+            pady=1,
+            cursor="hand2",
+            command=self._on_delete_history
+        )
+        del_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        clear_btn = tk.Button(
+            hist_header,
+            text="全履歴クリア",
+            font=(font_family, 8),
+            bg="#fdf0f0",
+            fg="#a02020",
+            activebackground="#fadcdc",
+            relief="groove",
+            bd=1,
+            padx=8,
+            pady=1,
+            cursor="hand2",
+            command=self._on_clear_history
+        )
+        clear_btn.pack(side=tk.RIGHT)
+
+        tree_frame = tk.Frame(hist_card, bg=self.BG_CARD)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("folder_name", "status", "last_opened", "full_path")
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse"
+        )
+
+        self.tree.heading("folder_name", text="フォルダ名", anchor="w")
+        self.tree.heading("status", text="状態 (ログ有無)", anchor="w")
+        self.tree.heading("last_opened", text="最終参照日時", anchor="center")
+        self.tree.heading("full_path", text="絶対パス", anchor="w")
+
+        self.tree.column("folder_name", width=180, minwidth=120, stretch=False)
+        self.tree.column("status", width=110, minwidth=90, stretch=False)
+        self.tree.column("last_opened", width=140, minwidth=120, stretch=False)
+        self.tree.column("full_path", width=300, minwidth=180, stretch=True)
+
+        self.tree.tag_configure("ok", foreground=self.STATUS_OK_FG)
+        self.tree.tag_configure("warn", foreground=self.STATUS_WARN_FG)
+        self.tree.tag_configure("err", foreground=self.STATUS_ERR_FG)
+
+        scroll_y = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", lambda e: self._on_select())
+
+        self._refresh_history_tree()
+
+        # 下部ボタングループ
+        btn_frame = tk.Frame(container, bg=self.BG_MAIN)
+        btn_frame.pack(fill=tk.X)
+
+        cancel_btn = tk.Button(
+            btn_frame,
+            text="キャンセル (Esc)",
+            font=(font_family, 9),
+            bg="#e4ebf3",
+            fg=self.TEXT_TITLE,
+            activebackground="#d2e0f0",
+            relief="groove",
+            bd=1,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            command=self._on_cancel
+        )
+        cancel_btn.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self.select_btn = tk.Button(
+            btn_frame,
+            text="このフォルダを開いて可視化 (Enter)",
+            font=(font_family, 9, "bold"),
+            bg=self.ACCENT_BLUE,
+            fg="#ffffff",
+            activebackground=self.ACCENT_BLUE_HOVER,
+            activeforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            command=self._on_select
+        )
+        self.select_btn.pack(side=tk.RIGHT)
+
+    def _refresh_history_tree(self) -> None:
+        """履歴テーブルを最新状態に再描画"""
         if not self.tree:
             return
 
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        items = self.history_mgr.get_detailed_history()
-        for idx, it in enumerate(items):
-            tags = ()
-            if not it["exists"]:
-                tags = ("missing",)
-            elif not it["log_found"]:
-                tags = ("no_log",)
-            else:
-                tags = ("ok",)
-
+        history_items = self.history_mgr.get_detailed_history()
+        for h in history_items:
+            tag = "ok" if h["log_found"] else ("warn" if h["exists"] else "err")
             self.tree.insert(
                 "",
                 tk.END,
-                values=(it["folder_name"], it["last_opened"], it["status"], it["path"]),
-                tags=tags
+                values=(h["folder_name"], h["status"], h["last_opened"], h["path"]),
+                tags=(tag,)
             )
 
-        self.tree.tag_configure("missing", foreground=self.STATUS_ERR_FG)
-        self.tree.tag_configure("no_log", foreground=self.STATUS_WARN_FG)
-        self.tree.tag_configure("ok", foreground=self.STATUS_OK_FG)
+    def _on_entry_focus_in(self, event=None) -> None:
+        if self.placeholder_active:
+            self.entry_path.delete(0, tk.END)
+            self.entry_path.config(fg=self.TEXT_BODY)
+            self.placeholder_active = False
 
-    def _on_browse(self):
-        """OS標準のフォルダ選択ダイアログを開く（選択中フォルダの親階層を初期表示）"""
-        current_input = self._get_entry_path()
-        init_dir = None
+    def _on_entry_focus_out(self, event=None) -> None:
+        if not self.entry_path.get().strip():
+            self.entry_path.delete(0, tk.END)
+            self.entry_path.insert(0, self.placeholder_text)
+            self.entry_path.config(fg=self.TEXT_PLACEHOLDER)
+            self.placeholder_active = True
 
-        if current_input:
-            abs_input = os.path.abspath(current_input)
-            parent_dir = os.path.dirname(abs_input)
-            # 親ディレクトリが存在し、かつ元のパスと異なる（ルート直下等でない）場合は親を優先
-            if parent_dir and parent_dir != abs_input and os.path.exists(parent_dir) and os.path.isdir(parent_dir):
-                init_dir = parent_dir
-            elif os.path.exists(abs_input) and os.path.isdir(abs_input):
-                init_dir = abs_input
-
-        if not init_dir or not os.path.exists(init_dir):
-            if self.initial_dir and os.path.exists(self.initial_dir):
-                abs_init = os.path.abspath(self.initial_dir)
-                parent_init = os.path.dirname(abs_init)
-                if parent_init and parent_init != abs_init and os.path.exists(parent_init) and os.path.isdir(parent_init):
-                    init_dir = parent_init
-                else:
-                    init_dir = abs_init
-            else:
-                init_dir = os.getcwd()
-
-        selected = filedialog.askdirectory(
-            title="SAP-net 実験ログフォルダの選択",
-            initialdir=init_dir,
-            parent=self.root
-        )
-        if selected:
-            norm_path = os.path.abspath(selected)
-            self._set_entry_path(norm_path)
-            if self.entry_path:
-                self.entry_path.icursor(tk.END)
-                self.entry_path.focus_set()
-
-    def _on_tree_select(self, event):
-        """履歴リスト選択時にパス入力欄を更新"""
-        if not self.tree:
+    def _on_path_changed(self, *args) -> None:
+        if self.placeholder_active:
             return
-        selected_items = self.tree.selection()
-        if selected_items:
-            vals = self.tree.item(selected_items[0], "values")
-            if vals and len(vals) >= 4:
-                selected_path = vals[3]
-                self._set_entry_path(selected_path)
+        path = self.path_var.get().strip()
+        self._update_status_preview(path)
 
-    def _on_tree_double_click(self, event):
-        """ダブルクリックで即座に決定"""
-        self._on_confirm()
+    def _update_status_preview(self, path: str) -> None:
+        if not path:
+            self.status_bar_card.config(text="")
+            return
 
-    def _on_delete_selected(self):
-        """選択された履歴行を削除"""
-        if not self.tree:
+        if not os.path.exists(path):
+            self.status_bar_card.config(text="※ 指定されたパスが存在しません", fg=self.STATUS_ERR_FG)
             return
-        selected_items = self.tree.selection()
-        if not selected_items:
-            return
-        vals = self.tree.item(selected_items[0], "values")
-        if vals and len(vals) >= 4:
-            target_path = vals[3]
-            self.history_mgr.remove_folder(target_path)
-            self._refresh_tree()
-            if self._get_entry_path() == target_path:
-                self._apply_placeholder()
 
-    def _on_clear_all(self):
-        """すべての履歴をクリア"""
-        if not self.tree or not self.tree.get_children():
+        if not os.path.isdir(path):
+            self.status_bar_card.config(text="※ ディレクトリ（フォルダ）を指定してください", fg=self.STATUS_WARN_FG)
             return
-        confirm = messagebox.askyesno(
-            "履歴の全消去",
-            "シミュレーションフォルダの選択履歴をすべて消去しますか？",
-            parent=self.root
-        )
-        if confirm:
-            self.history_mgr.clear_history()
-            self._refresh_tree()
+
+        log_files = glob.glob(os.path.join(path, "sap_dynamic_log_*.jsonl*"))
+        if not log_files:
+            log_files = glob.glob(os.path.join(path, "*.jsonl*"))
+        if not log_files:
+            log_files = glob.glob(os.path.join(path, "**", "sap_dynamic_log_*.jsonl*"), recursive=True)
+
+        if log_files:
+            target = max(log_files, key=os.path.getmtime)
+            f_name = os.path.basename(target)
+            self.status_bar_card.config(text=f"✓ SAP動的ログファイルを検出しました: {f_name}", fg=self.STATUS_OK_FG)
+        else:
+            self.status_bar_card.config(text="△ フォルダ内に SAP動的ログファイル (*.jsonl.gz / *.jsonl) が見つかりません", fg=self.STATUS_WARN_FG)
+
+    def _get_entry_path(self) -> str:
+        """現在の入力欄パスを取得（プレースホルダー時は空文字）"""
+        if self.placeholder_active:
+            return ""
+        return self.path_var.get().strip() if self.path_var else ""
+
+    def _set_entry_path(self, path: str) -> None:
+        """入力欄にパスを設定"""
+        if not path:
             self._apply_placeholder()
+            return
+        self.placeholder_active = False
+        if self.entry_path:
+            self.entry_path.config(fg=self.TEXT_BODY)
+        if self.path_var:
+            self.path_var.set(os.path.abspath(path))
 
-    def _on_confirm(self):
-        """「開く」決定処理"""
-        target_path = self._get_entry_path()
-        if not target_path and self.tree:
-            selected_items = self.tree.selection()
-            if selected_items:
-                vals = self.tree.item(selected_items[0], "values")
-                if vals and len(vals) >= 4:
-                    target_path = vals[3]
+    def _apply_placeholder(self) -> None:
+        """プレースホルダー状態を適用"""
+        self.placeholder_active = True
+        if self.entry_path:
+            self.entry_path.delete(0, tk.END)
+            self.entry_path.insert(0, self.placeholder_text)
+            self.entry_path.config(fg=self.TEXT_PLACEHOLDER)
+        if self.path_var:
+            self.path_var.set("")
 
-        if not target_path:
-            messagebox.showwarning(
-                "フォルダ未選択",
-                "対象の実験ログフォルダが指定されていません。\nフォルダを選択するか、パスを入力してください。",
-                parent=self.root
-            )
+    def _on_browse(self) -> None:
+        current_val = self._get_entry_path()
+        if current_val and os.path.exists(current_val):
+            initial = os.path.dirname(os.path.abspath(current_val)) if os.path.isfile(current_val) or os.path.isdir(current_val) else current_val
+        else:
+            initial = self.initial_dir
+
+        folder = filedialog.askdirectory(
+            parent=self.root,
+            title="SAP動的ログファイルがある実験フォルダを選択",
+            initialdir=initial
+        )
+        if folder:
+            self._set_entry_path(folder)
+
+    def _on_tree_select(self, event=None) -> None:
+        selected = self.tree.selection()
+        if not selected:
             return
 
-        abs_path = os.path.abspath(target_path)
+        values = self.tree.item(selected[0], "values")
+        if values and len(values) >= 4:
+            path = values[3]
+            self._set_entry_path(path)
+
+    def _on_delete_history(self) -> None:
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("お知らせ", "削除する履歴項目を一覧から選択してください。", parent=self.root)
+            return
+
+        values = self.tree.item(selected[0], "values")
+        if values and len(values) >= 4:
+            path = values[3]
+            self.history_mgr.remove_folder(path)
+            self._refresh_history_tree()
+
+    def _on_clear_history(self) -> None:
+        if not self.history_mgr.history:
+            return
+
+        if messagebox.askyesno("履歴クリアの確認", "すべてのフォルダ選択履歴を削除しますか？", parent=self.root):
+            self.history_mgr.clear_history()
+            self._refresh_history_tree()
+
+    def _on_confirm(self) -> None:
+        """決定ボタン処理（入力欄またはTreeview選択行の採用）"""
+        raw_path = self._get_entry_path()
+        if not raw_path and self.tree:
+            selected = self.tree.selection()
+            if selected:
+                values = self.tree.item(selected[0], "values")
+                if values and len(values) >= 4:
+                    raw_path = values[3]
+
+        if not raw_path:
+            messagebox.showwarning("入力確認", "フォルダパスを選択または入力してください。", parent=self.root)
+            return
+
+        abs_path = os.path.abspath(raw_path)
         if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
-            messagebox.showerror(
-                "フォルダ検出エラー",
-                f"指定されたフォルダが存在しません:\n{abs_path}",
-                parent=self.root
-            )
+            messagebox.showerror("エラー", f"指定されたフォルダが存在しません:\n{abs_path}", parent=self.root)
             return
 
+        self.history_mgr.add_folder(abs_path)
         self.selected_folder = abs_path
         if self.root:
             self.root.destroy()
-            self.root = None
 
-    def _on_cancel(self):
-        """キャンセル処理"""
+    def _on_select(self) -> None:
+        self._on_confirm()
+
+    def _on_cancel(self) -> None:
         self.selected_folder = None
         if self.root:
             self.root.destroy()
-            self.root = None
 
 
-def select_simulation_folder(initial_dir: Optional[str] = None, parent=None) -> Optional[str]:
+
+def select_simulation_folder(initial_dir: Optional[str] = None) -> Optional[str]:
     """
-    シミュレーションログフォルダ選択ダイアログを表示し、選択されたパスを返す便利関数。
+    フォルダ選択ダイアログを開き、ユーザーが選択したフォルダパスを返すヘルパー関数。
     """
     dialog = FolderSelectorDialog(initial_dir=initial_dir)
     return dialog.show()
 
-
-if __name__ == "__main__":
-    print("[TEST] Launching styled FolderSelectorDialog...")
-    folder = select_simulation_folder()
-    print(f"[TEST] Result: {folder}")

@@ -1,5 +1,9 @@
+"""
+SAP-net Visualizer メインエントリーポイント
+"""
 import os
 import sys
+import logging
 
 # windowed (GUI) モード起動時に stdout/stderr が None の場合の安全対策
 if sys.stdout is None:
@@ -13,9 +17,27 @@ if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
 import pygame
-from sap_visualizer import SAPVisualLogger, SAPVisualizerGUI, FolderHistoryManager, select_simulation_folder
+from sap_visualizer import (
+    SAPVisualLogger,
+    SAPVisualizerGUI,
+    FolderHistoryManager,
+    select_simulation_folder,
+)
+
+
+def setup_logging():
+    """ロギング設定の初期化"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)s] %(name)s: %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+
 
 def main():
+    setup_logging()
+    logger_instance = logging.getLogger("main")
+
     print("=" * 60)
     print("      SAP-net Visualizer")
     print("=" * 60)
@@ -38,20 +60,19 @@ def main():
             history_mgr.add_folder(os.path.dirname(target_path))
     else:
         # 直接起動時: フォルダ選択＆履歴ダイアログを表示
-        print("[INFO] Launching simulation folder selector dialog...")
+        logger_instance.info("Launching simulation folder selector dialog...")
         selected_folder = select_simulation_folder()
         if not selected_folder:
-            print("[INFO] Folder selection cancelled. Exiting SAP-net Visualizer.")
+            logger_instance.info("Folder selection cancelled. Exiting SAP-net Visualizer.")
             return
 
         if logger.load_from_folder(selected_folder):
             history_mgr.add_folder(selected_folder)
         else:
-            print(f"[ERROR] Failed to load selected folder: {selected_folder}")
+            logger_instance.error(f"Failed to load selected folder: {selected_folder}")
 
     gui = SAPVisualizerGUI(logger)
-    gui.live_follow = False  # 保存ログ閲覧ビューアー起動時は手動再生・精査モードを標準とする
-
+    gui.live_follow = False  # 保存ログ閲覧ビューアー起動時は手動探索モードを初期状態とする
 
     print("\n--- 操作方法・キーボードショートカット ---")
     print("  G キー       : 画面表示モード切替（ステップ表示 ⇄ 活性値推移グラフ）")
@@ -70,18 +91,10 @@ def main():
     print("  マウス       : タイムラインスライダーのドラッグ / ボタン操作")
     print("-" * 60)
 
-    print("[INFO] Starting Standalone SAP-net Visualizer...")
-    while gui.is_active:
-        if not gui.handle_events():
-            break
-        gui.draw()
+    logger_instance.info("Starting Standalone SAP-net Visualizer...")
+    gui.run()
+    logger_instance.info("SAP-net Visualizer terminated cleanly.")
 
-    # 終了処理
-    try:
-        pygame.quit()
-    except Exception:
-        pass
-    print("[INFO] SAP-net Visualizer terminated cleanly.")
 
 if __name__ == "__main__":
     main()
