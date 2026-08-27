@@ -76,6 +76,39 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         self.assertIn("CONFIG_STATUS", param_names)
         self.assertIn("SAP.THRESHOLD", param_names)
 
+    def test_draw_with_weights(self):
+        """重みエッジおよび数値バッジを含む描画処理の正常性テスト"""
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        gui = SAPVisualizerGUI(self.logger)
+        # 通常描画
+        gui.draw()
+        # ヘルプオーバーレイ描画
+        gui.show_help = True
+        gui.draw()
+        gui.show_help = False
+        # 折れ線グラフ描画
+        gui.view_mode = "GRAPH"
+        gui.draw()
+
+    def test_draw_weight_update_frame_with_empty_activations(self):
+        """A=[]のWEIGHT_UPDATEフレームでもノードとエッジが正常にフォールバック描画されるテスト"""
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        # Aが空でweightのみ存在するフレームを追加
+        self.logger.history.append({
+            "index": 10,
+            "episode": 1,
+            "step": 11,
+            "event_type": "WEIGHT_UPDATE",
+            "A": [],
+            "weight": [[0.0, 0.35], [0.35, 0.0]],
+            "plan": None,
+            "selectplans": [],
+            "threshold": 0.2
+        })
+        gui = SAPVisualizerGUI(self.logger)
+        gui.current_index = len(self.logger.history) - 1
+        gui.draw()  # エラーなく正常に描画できることを検証
+
 
 if __name__ == "__main__":
     unittest.main()
