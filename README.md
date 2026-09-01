@@ -36,8 +36,11 @@ SAP-net（Spreading Activation Policy Network）の動的パラメータ（知�
   - 実験設定ファイル（`config_used_*.yaml`）を自動解析し、モーダル画面上でパラメータ一覧を日本語解説付きで閲覧可能（マウスホイールスクロール対応）。
 - **リアルタイム追従モード (`L`キー)**:
   - シミュレーション実行中に最新フレームへ自動追従（Live Follow）するモニタリング機能。
+- **自動更新チェック＆ワンクリックアップデート**:
+  - アプリ起動時に GitHub Releases から最新バージョンをバックグラウンド非同期チェック。
+  - 新バージョンが利用可能な場合はヘッダーに通知ボタンを表示し、リリースノートの確認、プログレスバー付きワンクリックダウンロード＆インストーラー自動起動による上書き更新に対応。
 - **インストーラー配布対応 (Windows)**:
-  - Inno Setup と連携し、管理者権限不要（一般ユーザー権限）でインストール可能な Windows セットアップウィザード（`.exe`）を生成可能。
+  - Inno Setup と連携し、管理者権限不要（一般ユーザー権限）でインストール・上書き更新可能な Windows セットアップウィザード（`.exe`）を生成可能（実行中プロセスの安全自動終了に対応）。
 
 ---
 
@@ -153,15 +156,15 @@ Windows 環境において、専用のクリーンな一時仮想環境の作成
 .\build_all.bat
 ```
 
-- **生成されるインストーラー**: `dist_installer/SAP_net_Visualizer_Setup_v1.0.1.exe`
-- **インストール先**: ユーザーの `%LOCALAPPDATA%\Programs\SAP-net-Visualizer`（管理者権限不要）
+- **生成されるインストーラー**: `dist_installer/SAP_net_Visualizer_Setup_v1.1.0.exe`
+- **インストール先**: ユーザーの `%LOCALAPPDATA%\Programs\SAP-net-Visualizer`（管理者権限不要、既存インストールの自動上書き対応）
 - **詳細な手順**: [reference/SAP_VIEWER_PACKAGING_GUIDE.md](reference/SAP_VIEWER_PACKAGING_GUIDE.md) をご覧ください。
 
 ---
 
 ## テストの実行
 
-Python 標準の `unittest` を用いて、全 20 件の単体・統合テストスイートを一括実行できます。
+Python 標準の `unittest` を用いて、全 41 件の単体・統合テストスイートを一括実行できます。
 
 ```bash
 python -m unittest discover tests
@@ -186,21 +189,39 @@ SAP-net-Visualizer/
 │   ├── build.py                    # クロスプラットフォーム全自動ビルドエンジン
 │   ├── version_info.txt            # Windows実行ファイル用メタデータ
 │   ├── SAP-net-Visualizer.spec     # PyInstaller 設定
-│   └── installer.iss               # Inno Setup 定義スクリプト
+│   └── installer.iss               # Inno Setup 定義スクリプト (CloseApplications対応)
 ├── reference/                      # 各種技術リファレンス
-│   ├── SAP_VIEWER_MIGRATION_GUIDE.md   # 独立リポジトリ移行・構成ガイド
-│   └── SAP_VIEWER_PACKAGING_GUIDE.md   # アプリケーション化＆インストーラー作成ガイド
+│   ├── GENERIC_PYTHON_PACKAGING_GUIDE.md # 汎用Pythonアプリ化＆インストーラー作成ガイド
+│   ├── SAP_VIEWER_MIGRATION_GUIDE.md     # 独立リポジトリ移行・構成ガイド
+│   └── SAP_VIEWER_PACKAGING_GUIDE.md     # アプリケーション化＆インストーラー作成ガイド
 ├── sap_visualizer/                 # コア可視化パッケージ
 │   ├── __init__.py
-│   ├── folder_selector_gui.py      # シミュレーションフォルダ選択GUI＆履歴管理モジュール
-│   ├── sap_visual_logger.py        # ログ解析・データ管理モジュール
-│   └── sap_visualizer_gui.py       # Pygame/Tkinter によるGUI描画エンジン
-└── tests/                          # 正規テストスイート
+│   ├── constants.py                # 共通定数・バージョン・レイアウト定義
+│   ├── models.py                   # 型安全なデータモデル (LogFrame, ResolvedFrameInfo)
+│   ├── theme.py                    # 統一カラーパレット・デザイントークン
+│   ├── config_loader.py            # YAML設定動的パース・解説ローダー
+│   ├── updater.py                  # GitHub Releases 連携・自動更新エンジン
+│   ├── folder_selector_gui.py      # フォルダ選択GUI・履歴管理・更新ダイアログ
+│   ├── sap_visual_logger.py        # ログ解析・欠損値復元・データ管理モジュール
+│   ├── sap_visualizer_gui.py       # メインGUIコントローラー (Pygame)
+│   ├── utils/                      # 共通ユーティリティ (幾何計算・リソースパス)
+│   │   ├── geometry_utils.py
+│   │   └── resource_utils.py
+│   └── views/                      # 画面別レンダリングビュー
+│       ├── base_view.py            # 描画基底クラス
+│       ├── step_view.py            # ステップ詳細表示ビュー
+│       ├── chart_view.py           # 活性値推移折れ線グラフビュー
+│       └── overlays.py             # 設定確認・ヘルプモーダルビュー
+└── tests/                          # 正規テストスイート (全41テスト)
     ├── __init__.py
     ├── test_logger.py              # ロガー単体テスト (解凍・パース・耐障害性・検索)
     ├── test_history_manager.py     # 履歴管理単体テスト (LRU・JSON永続化・状態判定)
     ├── test_folder_selector.py     # フォルダ選択GUIダイアログテスト (ライフサイクル・UI)
-    ├── test_visualizer_gui.py      # 可視化GUI単体テスト (ナビゲーション・重み描画・コンフィグ)
+    ├── test_visualizer_gui.py      # 可視化GUI単体テスト (ナビゲーション・重み描画・スクロール)
+    ├── test_config_loader.py       # YAML設定ローダー単体テスト
+    ├── test_geometry_utils.py      # 幾何計算ユーティリティ単体テスト
+    ├── test_models.py              # データモデル単体テスト
+    ├── test_updater.py             # アップデータ単体テスト (APIパース・バージョン比較・UI安全更新)
     └── test_integration.py         # 全体パイプライン統合テスト
 ```
 
