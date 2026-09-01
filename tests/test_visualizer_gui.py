@@ -137,14 +137,34 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         gui.current_index = 0
         gui.draw()
 
-        # 大規模データ（5000フレーム超）のダウンサンプリング描画テスト
-        self.logger.history = [
-            LogFrame.from_dict({"index": i, "episode": 1, "step": i + 1, "event_type": "STEP", "A": [0.1, 0.5], "weight": [[0.0, 0.1], [0.1, 0.0]], "plan": 0, "selectplans": [1, 0], "threshold": 0.2})
-            for i in range(5000)
-        ]
+    def test_line_chart_many_nodes_and_scrolling(self):
+        """13個以上の多数知識ノードにおける1列スクロール描画およびスクロール動作テスト"""
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        num_nodes = 20
+        f0 = LogFrame.from_dict({
+            "index": 0, "episode": 1, "step": 1, "event_type": "STEP",
+            "A": [0.05 * i for i in range(num_nodes)],
+            "weight": [[0.0] * num_nodes for _ in range(num_nodes)],
+            "plan": 2, "selectplans": [0] * num_nodes, "threshold": 0.2
+        })
+        self.logger.history = [f0]
+        self.logger.max_nodes = num_nodes
         self.logger._update_metadata_cache()
-        gui.current_index = 2500
+
+        gui = SAPVisualizerGUI(self.logger)
+        gui.view_mode = ViewMode.LINE_CHART
         gui.draw()
+
+        # 1列スクロール表示で可視領域内のトグルrectが生成されていることを確認
+        self.assertGreater(len(gui.chart_view.node_toggle_rects), 0)
+        self.assertLessEqual(len(gui.chart_view.node_toggle_rects), num_nodes)
+        self.assertGreater(gui.chart_view.max_filter_scroll, 0)
+
+        # スクロール動作テスト
+        gui.chart_view.scroll_filter(1)
+        self.assertGreater(gui.chart_view.filter_scroll_y, 0)
+        gui.chart_view.scroll_filter(-1)
+        self.assertEqual(gui.chart_view.filter_scroll_y, 0)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ def load_raw_config(log_file_path: Optional[str] = None) -> Optional[dict]:
             raw_yaml = yaml.safe_load(f)
             if isinstance(raw_yaml, dict):
                 return raw_yaml
+    except (ImportError, ModuleNotFoundError):
+        logger.warning("PyYAML is not installed. Run 'pip install pyyaml' to enable config viewer.")
     except Exception as e:
         logger.warning(f"Failed to load raw YAML config file ({yaml_files[0]}): {e}")
 
@@ -164,6 +166,21 @@ def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Dict[str
                     "val_type": "none"
                 }
             ], False
+
+        # PyYAML ライブラリの有無を確認
+        try:
+            import yaml  # noqa: F401
+        except (ImportError, ModuleNotFoundError):
+            return [
+                {
+                    "is_section": False,
+                    "section": "STATUS",
+                    "key": "CONFIG_STATUS",
+                    "value": "PyYAML が未インストールです（'pip install pyyaml' を実行してください）",
+                    "val_type": "none"
+                }
+            ], False
+
         return [
             {
                 "is_section": False,

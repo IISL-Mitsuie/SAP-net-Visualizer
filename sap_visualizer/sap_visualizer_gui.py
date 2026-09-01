@@ -295,10 +295,14 @@ class SAPVisualizerGUI:
         if event.button == 4:  # Wheel Up
             if self.show_config:
                 self.config_scroll_y = max(0, self.config_scroll_y - 40)
+            elif self.view_mode == ViewMode.LINE_CHART:
+                self.chart_view.scroll_filter(-1)
             return
         elif event.button == 5:  # Wheel Down
             if self.show_config:
                 self.config_scroll_y = min(self.max_config_scroll, self.config_scroll_y + 40)
+            elif self.view_mode == ViewMode.LINE_CHART:
+                self.chart_view.scroll_filter(1)
             return
 
         if event.button != 1:

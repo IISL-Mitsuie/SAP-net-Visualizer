@@ -43,6 +43,8 @@ class ChartView(BaseView):
         self.btn_none_rect = pygame.Rect(0, 0, 0, 0)
         self.btn_save_chart_rect = pygame.Rect(0, 0, 0, 0)
         self.node_toggle_rects: List[Tuple[int, pygame.Rect]] = []
+        self.filter_scroll_y: int = 0
+        self.max_filter_scroll: int = 0
 
         # 知識ごとの表示/非表示フラグ辞書 {node_index: bool}
         self.visible_nodes: Dict[int, bool] = {}
@@ -55,6 +57,10 @@ class ChartView(BaseView):
     def toggle_node(self, node_index: int) -> None:
         """指定した知識番号の表示/非表示を反転"""
         self.visible_nodes[node_index] = not self.visible_nodes.get(node_index, True)
+
+    def scroll_filter(self, direction: int) -> None:
+        """マウスホイールによる知識フィルターパネルのスクロール"""
+        self.filter_scroll_y = max(0, min(self.max_filter_scroll, self.filter_scroll_y + direction * 26))
 
     def draw(
         self,
@@ -120,18 +126,30 @@ class ChartView(BaseView):
         t_save = self.font_small.render("グラフ保存 (S)", True, (15, 45, 90))
         self.screen.blit(t_save, t_save.get_rect(center=self.btn_save_chart_rect.center))
 
-        # 知識表示/非表示トグルボタンの描画・生成
+        # 知識表示/非表示トグルボタンの描画・生成（1列スクロール対応）
+        list_top = panel_y + 60
+        list_bottom = panel_y + panel_h - 40
+        list_h = list_bottom - list_top
+
+        row_h = 26
+        btn_h = 23
+        total_list_h = max_nodes * row_h
+        col_w = panel_w - 18
+
+        self.max_filter_scroll = max(0, total_list_h - list_h)
+        self.filter_scroll_y = min(self.filter_scroll_y, self.max_filter_scroll)
+
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(pygame.Rect(panel_x + 4, list_top, panel_w - 8, list_h))
+
         self.node_toggle_rects = []
         for i in range(max_nodes):
             if i not in self.visible_nodes:
                 self.visible_nodes[i] = True
 
-            by = panel_y + 64 + i * 26
-            if by + 24 > panel_y + panel_h - 40:
-                break
-
-            btn_rect = pygame.Rect(panel_x + 8, by, panel_w - 16, 23)
-            self.node_toggle_rects.append((i, btn_rect))
+            bx = panel_x + 8
+            by = list_top - self.filter_scroll_y + i * row_h
+            btn_rect = pygame.Rect(bx, by, col_w, btn_h)
 
             is_vis = self.visible_nodes[i]
             is_plan = (c_plan == i)
@@ -146,20 +164,35 @@ class ChartView(BaseView):
                 border_col = c_color if is_vis else (180, 180, 180)
                 border_w = 2 if is_vis else 1
 
-            pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=4)
-            pygame.draw.rect(self.screen, border_col, btn_rect, border_w, border_radius=4)
+            if by + btn_h >= list_top and by <= list_bottom:
+                self.node_toggle_rects.append((i, btn_rect))
+                pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=4)
+                pygame.draw.rect(self.screen, border_col, btn_rect, border_w, border_radius=4)
 
-            # 色丸マーク
-            pygame.draw.circle(self.screen, c_color, (btn_rect.x + 14, btn_rect.centery), 6)
-            if not is_vis:
-                pygame.draw.line(self.screen, (150, 150, 150), (btn_rect.x + 8, btn_rect.centery - 6), (btn_rect.x + 20, btn_rect.centery + 6), 2)
+                # 色丸マーク
+                pygame.draw.circle(self.screen, c_color, (btn_rect.x + 14, btn_rect.centery), 6)
+                if not is_vis:
+                    pygame.draw.line(self.screen, (150, 150, 150), (btn_rect.x + 8, btn_rect.centery - 6), (btn_rect.x + 20, btn_rect.centery + 6), 2)
 
-            chk_str = f"知識 {i}" + (" [✓]" if is_vis else " [  ]")
-            if is_plan:
-                chk_str += " ★選択"
-            txt_color = (190, 110, 0) if (is_plan and is_vis) else (COLOR_TEXT_BODY if is_vis else (130, 130, 130))
-            n_txt = self.font_small.render(chk_str, True, txt_color)
-            self.screen.blit(n_txt, (btn_rect.x + 26, btn_rect.centery - n_txt.get_height() // 2))
+                chk_str = f"知識 {i}" + (" [✓]" if is_vis else " [  ]")
+                if is_plan:
+                    chk_str += " ★選択"
+                txt_color = (190, 110, 0) if (is_plan and is_vis) else (COLOR_TEXT_BODY if is_vis else (130, 130, 130))
+                n_txt = self.font_small.render(chk_str, True, txt_color)
+                self.screen.blit(n_txt, (btn_rect.x + 26, btn_rect.centery - n_txt.get_height() // 2))
+
+        self.screen.set_clip(old_clip)
+
+        # スクロールバー描画
+        if self.max_filter_scroll > 0:
+            sb_x = panel_x + panel_w - 5
+            sb_y = list_top
+            sb_w = 3
+            sb_h = list_h
+            pygame.draw.rect(self.screen, (220, 225, 235), (sb_x, sb_y, sb_w, sb_h), border_radius=2)
+            handle_h = max(20, int(list_h * (list_h / float(total_list_h))))
+            handle_y = sb_y + int((self.filter_scroll_y / float(self.max_filter_scroll)) * (sb_h - handle_h))
+            pygame.draw.rect(self.screen, (120, 150, 200), (sb_x, handle_y, sb_w, handle_h), border_radius=2)
 
         if total_frames <= 1:
             msg = self.font_medium.render("ログデータが読み込まれていません（'O' キーで実験ログフォルダを選択してください）", True, (120, 130, 140))
