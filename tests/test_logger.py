@@ -90,8 +90,10 @@ class TestSAPVisualLogger(unittest.TestCase):
         success = logger.load_from_file(gz_path)
         self.assertTrue(success)
         self.assertEqual(len(logger.history), len(frames))
-        self.assertEqual(logger.history[0]["episode"], 1)
-        self.assertEqual(logger.history[4]["episode"], 2)
+        self.assertEqual(logger.history[0].episode, 1)
+        self.assertEqual(logger.history[4].episode, 2)
+        self.assertEqual(logger.max_nodes, 2)
+
 
     def test_load_from_file_plain_jsonl(self):
         """非圧縮JSONLファイルの読み込みテスト"""
@@ -168,6 +170,54 @@ class TestSAPVisualLogger(unittest.TestCase):
         self.assertEqual(idx, 4)
         self.assertEqual(logger.find_prev_event_index(4, "NEW_EPISODE"), 0)
 
+    def test_threshold_consistency_with_mixed_log_frames(self):
+        """STEPが0.15、ACTIVATIONが0.18等、ログ内で混在していても基準閾値が一貫して適用されることをテスト"""
+        mixed_frames = [
+            {"index": 0, "episode": 1, "step": 1, "event_type": "ACTIVATION", "A": [0.1, 0.2], "threshold": 0.18},
+            {"index": 1, "episode": 1, "step": 1, "event_type": "SELECT_PLAN", "A": [0.1, 0.2], "threshold": 0.18},
+            {"index": 2, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.1, 0.2], "threshold": 0.15},
+            {"index": 3, "episode": 1, "step": 2, "event_type": "STEP", "A": [0.1, 0.2], "threshold": 0.15},
+        ]
+        log_path = os.path.join(self.test_dir, "mixed.jsonl")
+        with open(log_path, "w", encoding="utf-8") as f:
+            for fr in mixed_frames:
+                f.write(json.dumps(fr) + "\n")
+
+        logger = SAPVisualLogger()
+        logger.load_from_file(log_path)
+
+        # YAML設定がない場合でも、STEPイベント基準の dominant_threshold (0.15) が全フレームに一貫して適用される
+        self.assertEqual(logger.active_threshold, 0.15)
+        for i in range(len(mixed_frames)):
+            res = logger.resolve_frame(i)
+            self.assertEqual(res.threshold, 0.15)
+
+    def test_threshold_prioritizes_config_used_yaml(self):
+        """config_used_*.yaml に SAP.THRESHOLD が存在する場合、それが最優先で全フレームに反映されるテスト"""
+        mixed_frames = [
+            {"index": 0, "episode": 1, "step": 1, "event_type": "ACTIVATION", "threshold": 0.18},
+            {"index": 1, "episode": 1, "step": 1, "event_type": "STEP", "threshold": 0.15},
+        ]
+        log_path = os.path.join(self.test_dir, "exp_log.jsonl")
+        with open(log_path, "w", encoding="utf-8") as f:
+            for fr in mixed_frames:
+                f.write(json.dumps(fr) + "\n")
+
+        # 同一ディレクトリに config_used_*.yaml を作成 (SAP.THRESHOLD: 0.25)
+        yaml_path = os.path.join(self.test_dir, "config_used_20260827_999999.yaml")
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            f.write("SAP:\n  THRESHOLD: 0.25\n")
+
+        logger = SAPVisualLogger()
+        logger.load_from_file(log_path)
+
+        self.assertEqual(logger.config_threshold, 0.25)
+        self.assertEqual(logger.active_threshold, 0.25)
+        for i in range(len(mixed_frames)):
+            res = logger.resolve_frame(i)
+            self.assertEqual(res.threshold, 0.25)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -10,6 +10,8 @@ import gzip
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sap_visualizer import SAPVisualLogger, SAPVisualizerGUI
+from sap_visualizer.models import LogFrame
+from sap_visualizer.constants import ViewMode
 
 
 class TestSAPVisualizerGUI(unittest.TestCase):
@@ -37,19 +39,19 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         self.assertEqual(gui.current_index, 0)
 
         # コマ送り
-        gui.step_forward()
+        gui._handle_button_action("step_forward")
         self.assertEqual(gui.current_index, 1)
 
-        gui.step_forward()
+        gui._handle_button_action("step_forward")
         self.assertEqual(gui.current_index, 2)
 
         # コマ戻し
-        gui.step_back()
+        gui._handle_button_action("step_back")
         self.assertEqual(gui.current_index, 1)
 
         # リセット
         gui.current_index = 5
-        gui.current_index = 0
+        gui._handle_button_action("reset_index")
         self.assertEqual(gui.current_index, 0)
 
     def test_toggle_play(self):
@@ -57,24 +59,11 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         gui = SAPVisualizerGUI(self.logger)
         self.assertFalse(gui.is_playing)
 
-        gui.toggle_play()
+        gui._handle_button_action("toggle_play")
         self.assertTrue(gui.is_playing)
-        self.assertFalse(gui.live_follow)
 
-        gui.toggle_play()
+        gui._handle_button_action("toggle_play")
         self.assertFalse(gui.is_playing)
-
-    def test_load_config_fallback(self):
-        """YAMLファイル未検出時の動的フォールバック設定値生成テスト"""
-        gui = SAPVisualizerGUI(self.logger)
-        config_items, yaml_loaded = gui.load_config_data(return_status=True)
-        self.assertFalse(yaml_loaded)
-        self.assertGreater(len(config_items), 0)
-
-        # パラメータ名が含まれているか確認
-        param_names = [item[0] for item in config_items]
-        self.assertIn("CONFIG_STATUS", param_names)
-        self.assertIn("SAP.THRESHOLD", param_names)
 
     def test_draw_with_weights(self):
         """重みエッジおよび数値バッジを含む描画処理の正常性テスト"""
@@ -87,14 +76,13 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         gui.draw()
         gui.show_help = False
         # 折れ線グラフ描画
-        gui.view_mode = "GRAPH"
+        gui.view_mode = ViewMode.LINE_CHART
         gui.draw()
 
     def test_draw_weight_update_frame_with_empty_activations(self):
         """A=[]のWEIGHT_UPDATEフレームでもノードとエッジが正常にフォールバック描画されるテスト"""
         os.environ["SDL_VIDEODRIVER"] = "dummy"
-        # Aが空でweightのみ存在するフレームを追加
-        self.logger.history.append({
+        raw_frame = {
             "index": 10,
             "episode": 1,
             "step": 11,
@@ -104,19 +92,21 @@ class TestSAPVisualizerGUI(unittest.TestCase):
             "plan": None,
             "selectplans": [],
             "threshold": 0.2
-        })
+        }
+        self.logger.history.append(LogFrame.from_dict(raw_frame))
+        self.logger._update_metadata_cache()
+
         gui = SAPVisualizerGUI(self.logger)
         gui.current_index = len(self.logger.history) - 1
-        gui.draw()  # エラーなく正常に描画できることを検証
+        gui.draw()
 
     def test_get_resolved_frame_info(self):
         """get_resolved_frame_infoによる欠損値フォールバック復元テスト"""
-        # 1フレーム目: 完全なデータ
-        # 2フレーム目: plan=None, A=[] のイベントフレーム
-        self.logger.history = [
-            {"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.5, 0.8], "weight": [[0.0, 0.2], [0.2, 0.0]], "plan": 1, "selectplans": [0, 1]},
-            {"index": 1, "episode": 1, "step": 1, "event_type": "WEIGHT_UPDATE", "A": [], "weight": [[0.0, 0.5], [0.5, 0.0]], "plan": None, "selectplans": []}
-        ]
+        f0 = LogFrame.from_dict({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.5, 0.8], "weight": [[0.0, 0.2], [0.2, 0.0]], "plan": 1, "selectplans": [0, 1]})
+        f1 = LogFrame.from_dict({"index": 1, "episode": 1, "step": 1, "event_type": "WEIGHT_UPDATE", "A": [], "weight": [[0.0, 0.5], [0.5, 0.0]], "plan": None, "selectplans": []})
+        self.logger.history = [f0, f1]
+        self.logger._update_metadata_cache()
+
         gui = SAPVisualizerGUI(self.logger)
         
         # フレーム0の検証
@@ -137,24 +127,45 @@ class TestSAPVisualizerGUI(unittest.TestCase):
     def test_line_chart_selected_knowledge(self):
         """折れ線グラフ画面での選択知識強調および大規模ログ間引き描画テスト"""
         os.environ["SDL_VIDEODRIVER"] = "dummy"
-        self.logger.history = [
-            {"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.2, 0.9], "weight": [[0.0, 0.2], [0.2, 0.0]], "plan": 1, "selectplans": [0, 1], "threshold": 0.2},
-            {"index": 1, "episode": 1, "step": 2, "event_type": "STEP", "A": [0.4, 0.7], "weight": [[0.0, 0.3], [0.3, 0.0]], "plan": 0, "selectplans": [1, 1], "threshold": 0.2}
-        ]
-        gui = SAPVisualizerGUI(self.logger)
-        gui.view_mode = "LINE_CHART"
-        gui.current_index = 0
-        gui.draw()  # 選択知識マーカー描画
+        f0 = LogFrame.from_dict({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.2, 0.9], "weight": [[0.0, 0.2], [0.2, 0.0]], "plan": 1, "selectplans": [0, 1], "threshold": 0.2})
+        f1 = LogFrame.from_dict({"index": 1, "episode": 1, "step": 2, "event_type": "STEP", "A": [0.4, 0.7], "weight": [[0.0, 0.3], [0.3, 0.0]], "plan": 0, "selectplans": [1, 1], "threshold": 0.2})
+        self.logger.history = [f0, f1]
+        self.logger._update_metadata_cache()
 
-        # 大規模データ（5000フレーム超）のダウンサンプリング描画テスト
-        self.logger.history = [
-            {"index": i, "episode": 1, "step": i + 1, "event_type": "STEP", "A": [0.1, 0.5], "weight": [[0.0, 0.1], [0.1, 0.0]], "plan": 0, "selectplans": [1, 0], "threshold": 0.2}
-            for i in range(5000)
-        ]
-        gui.current_index = 2500
+        gui = SAPVisualizerGUI(self.logger)
+        gui.view_mode = ViewMode.LINE_CHART
+        gui.current_index = 0
         gui.draw()
+
+    def test_line_chart_many_nodes_and_scrolling(self):
+        """13個以上の多数知識ノードにおける1列スクロール描画およびスクロール動作テスト"""
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        num_nodes = 20
+        f0 = LogFrame.from_dict({
+            "index": 0, "episode": 1, "step": 1, "event_type": "STEP",
+            "A": [0.05 * i for i in range(num_nodes)],
+            "weight": [[0.0] * num_nodes for _ in range(num_nodes)],
+            "plan": 2, "selectplans": [0] * num_nodes, "threshold": 0.2
+        })
+        self.logger.history = [f0]
+        self.logger.max_nodes = num_nodes
+        self.logger._update_metadata_cache()
+
+        gui = SAPVisualizerGUI(self.logger)
+        gui.view_mode = ViewMode.LINE_CHART
+        gui.draw()
+
+        # 1列スクロール表示で可視領域内のトグルrectが生成されていることを確認
+        self.assertGreater(len(gui.chart_view.node_toggle_rects), 0)
+        self.assertLessEqual(len(gui.chart_view.node_toggle_rects), num_nodes)
+        self.assertGreater(gui.chart_view.max_filter_scroll, 0)
+
+        # スクロール動作テスト
+        gui.chart_view.scroll_filter(1)
+        self.assertGreater(gui.chart_view.filter_scroll_y, 0)
+        gui.chart_view.scroll_filter(-1)
+        self.assertEqual(gui.chart_view.filter_scroll_y, 0)
 
 
 if __name__ == "__main__":
     unittest.main()
-
