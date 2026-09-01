@@ -179,9 +179,19 @@ def main():
     print("=" * 60)
     print("  BUILD PROCESS FINISHED!")
     
-    # installer.iss からバージョン番号を動的抽出
-    app_version = "1.0.1"
-    if iss_file.exists():
+    # sap_visualizer/__init__.py からバージョン番号を動的抽出
+    app_version = "1.1.0"
+    init_file = root_dir / "sap_visualizer" / "__init__.py"
+    if init_file.exists():
+        try:
+            with open(init_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if "__version__" in line and '"' in line:
+                        app_version = line.split('"')[1]
+                        break
+        except Exception:
+            pass
+    elif iss_file.exists():
         try:
             with open(iss_file, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:

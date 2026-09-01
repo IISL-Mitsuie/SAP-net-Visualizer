@@ -1,5 +1,5 @@
 #define MyAppName "SAP-net Visualizer"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "IISL Mitsuie Lab"
 #define MyAppExeName "SAP-net-Visualizer.exe"
 
@@ -20,6 +20,10 @@ SolidCompression=yes
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
+; 実行中プロセスの安全検知と上書きインストール対応
+CloseApplications=yes
+CloseApplicationsFilter=*.exe
+RestartApplications=no
 
 [Languages]
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"

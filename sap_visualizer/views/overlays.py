@@ -4,6 +4,7 @@ SAP-net Visualizer モーダルダイアログ（設定確認 ＆ 操作ガイ�
 import pygame
 from typing import Dict, Optional, List, Tuple
 from .base_view import BaseView
+from ..constants import APP_VERSION
 from ..config_loader import load_config_data
 from ..utils.geometry_utils import wrap_text_to_lines
 from ..theme import (
@@ -190,7 +191,7 @@ class OverlaysView(BaseView):
         pygame.draw.rect(self.screen, (50, 90, 150), (dlg_x, dlg_y, dlg_w, dlg_h), 3, border_radius=10)
 
         # ヘッダー
-        h_title = self.font_title.render("画面の見方・操作ガイド", True, COLOR_TEXT_TITLE)
+        h_title = self.font_title.render(f"画面の見方・操作ガイド (v{APP_VERSION})", True, COLOR_TEXT_TITLE)
         self.screen.blit(h_title, (dlg_x + 25, dlg_y + 18))
         pygame.draw.line(self.screen, COLOR_BORDER_DEFAULT, (dlg_x + 20, dlg_y + 52), (dlg_x + dlg_w - 20, dlg_y + 52), 2)
 
