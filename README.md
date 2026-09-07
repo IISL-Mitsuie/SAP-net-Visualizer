@@ -191,6 +191,7 @@ SAP-net-Visualizer/
 │   ├── SAP-net-Visualizer.spec     # PyInstaller 設定
 │   └── installer.iss               # Inno Setup 定義スクリプト (CloseApplications対応)
 ├── reference/                      # 各種技術リファレンス
+│   ├── GENERIC_APP_UPDATER_GUIDE.md      # 汎用GitHub Releases自動更新実装ガイド
 │   ├── GENERIC_PYTHON_PACKAGING_GUIDE.md # 汎用Pythonアプリ化＆インストーラー作成ガイド
 │   ├── SAP_VIEWER_MIGRATION_GUIDE.md     # 独立リポジトリ移行・構成ガイド
 │   └── SAP_VIEWER_PACKAGING_GUIDE.md     # アプリケーション化＆インストーラー作成ガイド
@@ -231,6 +232,9 @@ SAP-net-Visualizer/
 
 - **[sap_visualizer.md](sap_visualizer.md)**: SAP-net を利用したシミュレーションプログラムへの可視化・ログ機能 導入・改変ガイド
 - **[DATA_FORMAT.md](DATA_FORMAT.md)**: 動的ログデータ（JSONL）およびハイパーパラメータ設定（YAML）の詳細仕様書
+- **[reference/LINUX_DEPLOYMENT_GUIDE.md](reference/LINUX_DEPLOYMENT_GUIDE.md)**: Linux 環境導入・実行（スタンドアロンバイナリ / AppImage / Docker）完全ガイド
+- **[reference/GENERIC_APP_UPDATER_GUIDE.md](reference/GENERIC_APP_UPDATER_GUIDE.md)**: Python アプリ向け GitHub Releases 自動更新完全実装ガイド
+- **[reference/GENERIC_PYTHON_PACKAGING_GUIDE.md](reference/GENERIC_PYTHON_PACKAGING_GUIDE.md)**: 汎用 Python アプリケーション化＆インストーラー作成ガイド
 - **[reference/SAP_VIEWER_MIGRATION_GUIDE.md](reference/SAP_VIEWER_MIGRATION_GUIDE.md)**: 独立リポジトリ移行とアーキテクチャの解説リファレンス
 - **[reference/SAP_VIEWER_PACKAGING_GUIDE.md](reference/SAP_VIEWER_PACKAGING_GUIDE.md)**: Windows インストーラー作成とパッケージングの完全手順書
 
