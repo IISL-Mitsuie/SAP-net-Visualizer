@@ -239,6 +239,102 @@ class TestSAPVisualLogger(unittest.TestCase):
         self.assertEqual(logger.history[2].index, 2)
         self.assertEqual(logger.history[2].activations, [0.7, 0.2])
 
+    def test_resolve_frame_cache_consistency_and_edge_cases(self):
+        """resolve_frameのO(1)キャッシュが欠損値補完・境界値・再ロードで整合すること"""
+        from sap_visualizer.models import LogFrame
+
+        log_path = os.path.join(self.test_dir, "resolve_cache.jsonl")
+        frames = [
+            {"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.1, 0.2], "weight": [[0.0, 0.5], [0.5, 0.0]], "plan": 1, "selectplans": [1, 2], "threshold": 0.3},
+            {"index": 1, "episode": 1, "step": 2, "event_type": "REPLAN", "A": [], "weight": [], "plan": None, "selectplans": []},
+            {"index": 2, "episode": 2, "step": 1, "event_type": "STEP", "A": [0.9, 0.8], "weight": [], "plan": 0, "selectplans": [0], "threshold": 0.4},
+        ]
+        with open(log_path, "w", encoding="utf-8") as f:
+            for item in frames:
+                f.write(json.dumps(item) + "\n")
+
+        logger = SAPVisualLogger()
+        self.assertTrue(logger.load_from_file(log_path))
+
+        # 範囲外インデックスのフォールバック
+        out_low = logger.resolve_frame(-1)
+        out_high = logger.resolve_frame(99)
+        self.assertEqual(out_low.activations, [])
+        self.assertEqual(out_high.activations, [])
+
+        # フレーム1はフレーム0の有効値をフォワードフィルし、フレーム2で部分更新
+        r0 = logger.resolve_frame(0)
+        r1 = logger.resolve_frame(1)
+        r2 = logger.resolve_frame(2)
+        self.assertEqual(r0.plan, 1)
+        self.assertEqual(r1.plan, 1)
+        self.assertEqual(r1.selectplans, [1, 2])
+        self.assertEqual(r1.activations, [0.1, 0.2])
+        self.assertEqual(r1.weight_matrix, [[0.0, 0.5], [0.5, 0.0]])
+        self.assertEqual(r1.event_type, "REPLAN")
+        self.assertEqual(r2.plan, 0)
+        self.assertEqual(r2.selectplans, [0])
+        self.assertEqual(r2.activations, [0.9, 0.8])
+        self.assertEqual(r2.weight_matrix, [[0.0, 0.5], [0.5, 0.0]])
+
+        # history直接変更時もresolve_frameが長さ不一致を検知してキャッシュを再構築すること
+        logger.history.append(
+            LogFrame(index=3, episode=2, step=2, event_type="STEP", activations=[], weight_matrix=[], plan=None, selectplans=[])
+        )
+        r3 = logger.resolve_frame(3)
+        self.assertEqual(r3.activations, [0.9, 0.8])
+        self.assertEqual(r3.plan, 0)
+
+    def test_resolve_frame_large_history_fast(self):
+        """大量フレームでもresolve_frameがO(1)で返却されること"""
+        from sap_visualizer.models import LogFrame
+
+        logger = SAPVisualLogger()
+        logger.history = [
+            LogFrame(
+                index=i,
+                episode=1,
+                step=i + 1,
+                event_type="STEP",
+                activations=[0.5, 0.5] if i == 0 else [],
+                weight_matrix=[[0.0, 0.2], [0.2, 0.0]] if i == 0 else [],
+                plan=0 if i == 0 else None,
+                selectplans=[0] if i == 0 else [],
+            )
+            for i in range(5000)
+        ]
+        # 末尾から参照してもキャッシュ再構築1回 + O(1)参照で即時完了する
+        res_last = logger.resolve_frame(4999)
+        self.assertEqual(res_last.activations, [0.5, 0.5])
+        self.assertEqual(res_last.plan, 0)
+
+    def test_resolve_frame_rebuilds_when_history_replaced_same_length_or_threshold_changed(self):
+        """logger.historyを同じ長さの別リストに差し替えたり閾値変更した際にキャッシュが更新されること"""
+        from sap_visualizer.models import LogFrame
+
+        logger = SAPVisualLogger()
+        logger.history = [
+            LogFrame(index=0, episode=1, step=1, event_type="STEP", activations=[0.1, 0.2], weight_matrix=[], plan=0, selectplans=[0], threshold=0.2),
+            LogFrame(index=1, episode=1, step=2, event_type="STEP", activations=[0.3, 0.4], weight_matrix=[], plan=1, selectplans=[1], threshold=0.2),
+        ]
+        self.assertEqual(logger.resolve_frame(0).activations, [0.1, 0.2])
+        self.assertEqual(logger.resolve_frame(1).plan, 1)
+        self.assertEqual(logger.resolve_frame(0).threshold, 0.2)
+
+        # 同じ要素数の別リストに差し替え
+        logger.history = [
+            LogFrame(index=0, episode=2, step=1, event_type="STEP", activations=[0.8, 0.9], weight_matrix=[], plan=2, selectplans=[2], threshold=0.5),
+            LogFrame(index=1, episode=2, step=2, event_type="STEP", activations=[], weight_matrix=[], plan=None, selectplans=[]),
+        ]
+        self.assertEqual(logger.resolve_frame(0).activations, [0.8, 0.9])
+        self.assertEqual(logger.resolve_frame(1).activations, [0.8, 0.9])
+        self.assertEqual(logger.resolve_frame(1).plan, 2)
+
+        # config_threshold / dominant_threshold の変更にも追従する
+        logger.config_threshold = 0.75
+        self.assertEqual(logger.resolve_frame(0).threshold, 0.75)
+        self.assertEqual(logger.resolve_frame(1).threshold, 0.75)
+
 
 if __name__ == "__main__":
     unittest.main()
