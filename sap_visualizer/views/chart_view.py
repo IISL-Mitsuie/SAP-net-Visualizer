@@ -8,6 +8,7 @@ import logging
 import pygame
 from typing import Dict, List, Optional, Tuple
 from .base_view import BaseView
+from ..constants import DEFAULT_THRESHOLD
 from ..models import LogFrame, ResolvedFrameInfo
 from ..utils.geometry_utils import calculate_downsampled_indices, calculate_legend_layout
 from ..theme import (
@@ -61,6 +62,41 @@ class ChartView(BaseView):
     def scroll_filter(self, direction: int) -> None:
         """マウスホイールによる知識フィルターパネルのスクロール"""
         self.filter_scroll_y = max(0, min(self.max_filter_scroll, self.filter_scroll_y + direction * 26))
+
+    @staticmethod
+    def _resolve_activations_series(history: List[LogFrame]) -> List[List[float]]:
+        """各フレームの活性値リストを解決（空配列フレームは直前の有効な活性値を引き継ぐ）"""
+        resolved: List[List[float]] = []
+        last_valid: List[float] = []
+        for frame in history:
+            if frame.activations:
+                last_valid = frame.activations
+            resolved.append(last_valid)
+        return resolved
+
+    def _draw_threshold_line(
+        self,
+        surface: pygame.Surface,
+        rx: int,
+        ry: int,
+        rw: int,
+        rh: int,
+        thresh_val: float
+    ) -> None:
+        """活性化閾値線（赤破線）とラベルを描画"""
+        clamped_thresh = min(1.0, max(0.0, float(thresh_val)))
+        thresh_y = ry + rh - int(clamped_thresh * rh)
+        dash_len = 8
+        for dash_x in range(rx, rx + rw, dash_len * 2):
+            pygame.draw.line(
+                surface,
+                COLOR_ACCENT_RED,
+                (dash_x, thresh_y),
+                (min(rx + rw, dash_x + dash_len), thresh_y),
+                2
+            )
+        t_lbl = self.font_small.render(f"活性化閾値 ({clamped_thresh:.2f})", True, (200, 40, 40))
+        surface.blit(t_lbl, (rx + rw - 120, thresh_y - 18))
 
     def draw(
         self,
@@ -216,16 +252,11 @@ class ChartView(BaseView):
             self.screen.blit(lbl, (cx - lbl.get_width() // 2, chart_y + chart_h + 5))
 
         # 活性化閾値線
-        thresh_val = resolved_info.threshold
-        thresh_y = chart_y + chart_h - int(thresh_val * chart_h)
-        dash_len = 8
-        for dash_x in range(chart_x, chart_x + chart_w, dash_len * 2):
-            pygame.draw.line(self.screen, COLOR_ACCENT_RED, (dash_x, thresh_y), (min(chart_x + chart_w, dash_x + dash_len), thresh_y), 2)
-        t_lbl = self.font_small.render(f"活性化閾値 ({thresh_val:.2f})", True, (200, 40, 40))
-        self.screen.blit(t_lbl, (chart_x + chart_w - 120, thresh_y - 18))
+        self._draw_threshold_line(self.screen, chart_x, chart_y, chart_w, chart_h, resolved_info.threshold)
 
         # 時系列折れ線描画 (間引きインデックス適用)
         indices = calculate_downsampled_indices(total_frames, chart_w)
+        resolved_acts = self._resolve_activations_series(history)
 
         for i in range(max_nodes):
             if not self.visible_nodes.get(i, True):
@@ -235,8 +266,7 @@ class ChartView(BaseView):
             points = []
             for idx in indices:
                 px = chart_x + int((idx / float(total_frames - 1)) * chart_w)
-                frame_data = history[idx]
-                act_list = frame_data.activations
+                act_list = resolved_acts[idx]
                 act_val = act_list[i] if i < len(act_list) else 0.0
                 act_val = min(1.0, max(0.0, float(act_val)))
                 py = chart_y + chart_h - int(act_val * chart_h)
@@ -291,7 +321,8 @@ class ChartView(BaseView):
     def export_chart_surface(
         self,
         history: List[LogFrame],
-        max_nodes: int
+        max_nodes: int,
+        threshold: Optional[float] = None
     ) -> Optional[pygame.Surface]:
         """独立した高精細グラフ画像サーフェス（グラフ＋下部凡例）を生成して返す"""
         total_frames = len(history)
@@ -338,19 +369,22 @@ class ChartView(BaseView):
         x_axis_lbl = self.font_small.render("フレーム数 (Step)", True, (60, 70, 80))
         surf.blit(x_axis_lbl, (gx + (gw - x_axis_lbl.get_width()) // 2, gy + gh + 28))
 
+        # 活性化閾値線
+        thresh_val = threshold if threshold is not None else (history[0].threshold if history else DEFAULT_THRESHOLD)
+        self._draw_threshold_line(surf, gx, gy, gw, gh, thresh_val)
+
         # 折れ線描画
         indices = calculate_downsampled_indices(total_frames, gw)
+        resolved_acts = self._resolve_activations_series(history)
         for i in vis_node_indices:
             points = []
             c_color = NODE_COLORS[i % len(NODE_COLORS)]
             for frame_idx in indices:
-                f = history[frame_idx]
-                act_list = f.activations
-                if i < len(act_list):
-                    val = max(0.0, min(1.0, float(act_list[i])))
-                    px = gx + int((frame_idx / max(1, total_frames - 1)) * gw)
-                    py = gy + gh - int(val * gh)
-                    points.append((px, py))
+                act_list = resolved_acts[frame_idx]
+                val = max(0.0, min(1.0, float(act_list[i]))) if i < len(act_list) else 0.0
+                px = gx + int((frame_idx / max(1, total_frames - 1)) * gw)
+                py = gy + gh - int(val * gh)
+                points.append((px, py))
 
             if len(points) >= 2:
                 pygame.draw.lines(surf, c_color, False, points, 2)

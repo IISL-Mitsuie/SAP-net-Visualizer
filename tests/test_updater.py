@@ -167,6 +167,54 @@ class TestUpdater(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_update_dialog_download_error_callback_no_nameerror(self):
+        """_start_downloadのワーカーで例外が発生してもコールバック内でNameErrorにならないこと"""
+        import threading
+        from sap_visualizer.folder_selector_gui import UpdateDialog
+
+        dlg = UpdateDialog.__new__(UpdateDialog)
+        dlg.update_info = UpdateInfo(
+            version="1.2.0",
+            tag_name="v1.2.0",
+            title="v1.2.0",
+            release_notes="",
+            release_url="https://example.com",
+            published_at="2026-09-01T00:00:00Z",
+            installer_name="setup.exe",
+            installer_download_url="https://example.com/setup.exe",
+            is_update_available=True,
+        )
+        dlg.cancel_event = threading.Event()
+        dlg.update_now_btn = MagicMock()
+        dlg.close_btn = MagicMock()
+        dlg.progress_frame = MagicMock()
+        dlg.progress_bar = {}
+        dlg.progress_lbl = MagicMock()
+        dlg.dialog = MagicMock()
+
+        captured_callbacks = []
+        dlg.dialog.after.side_effect = lambda _delay, fn: captured_callbacks.append(fn)
+        dlg._on_download_failed = MagicMock()
+
+        with patch("sap_visualizer.folder_selector_gui.download_installer", side_effect=RuntimeError("boom")):
+            dlg._start_download()
+            dlg.download_thread.join(timeout=2.0)
+
+        self.assertEqual(len(captured_callbacks), 1)
+        # except ブロックを抜けた後にラムダを実行しても NameError にならないことを検証
+        captured_callbacks[0]()
+        dlg._on_download_failed.assert_called_once_with("boom")
+
+    def test_update_dialog_open_installer_folder(self):
+        """_open_installer_folderがsubprocess未定義エラーにならず動作すること"""
+        from sap_visualizer.folder_selector_gui import UpdateDialog
+
+        dlg = UpdateDialog.__new__(UpdateDialog)
+        with patch("sap_visualizer.folder_selector_gui.sys.platform", "win32"), \
+             patch("sap_visualizer.folder_selector_gui.subprocess.Popen") as mock_popen:
+            dlg._open_installer_folder("C:/temp/setup.exe")
+            mock_popen.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

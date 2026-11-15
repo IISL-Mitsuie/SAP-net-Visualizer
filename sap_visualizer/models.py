@@ -31,18 +31,43 @@ class LogFrame:
         JSONからパースされた生の辞書（dict）を型安全な LogFrame オブジェクトに変換。
         キーの欠損やフォーマットの揺らぎ（最小構成ログやイベント行）を安全に吸収します。
         """
+        def _safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
+            if val is None:
+                return default
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
+        def _safe_float(val: Any, default: float = DEFAULT_THRESHOLD) -> float:
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+
+        raw_a = data.get("A") or []
+        raw_weight = data.get("weight") or []
+        raw_selectplans = data.get("selectplans") or []
+        raw_policyvalue = data.get("policyvalue") or []
+
+        idx_val = _safe_int(data.get("index"), 0)
+        ep_val = _safe_int(data.get("episode"), 1)
+        st_val = _safe_int(data.get("step"), 0)
+
         return cls(
-            index=int(data.get("index", 0)),
-            episode=int(data.get("episode", 1)),
-            step=int(data.get("step", 0)),
-            event_type=str(data.get("event_type", EventType.STEP)),
-            activations=[float(x) for x in data.get("A", []) if x is not None],
-            weight_matrix=[[float(c) for c in row] for row in data.get("weight", []) if row],
-            plan=int(data["plan"]) if data.get("plan") is not None else None,
-            selectplans=[int(x) for x in data.get("selectplans", []) if x is not None],
-            threshold=float(data.get("threshold", DEFAULT_THRESHOLD)),
-            policyvalue=[float(x) for x in data.get("policyvalue", []) if x is not None],
-            reused_action=int(data["reused_action"]) if data.get("reused_action") is not None else None,
+            index=idx_val if idx_val is not None else 0,
+            episode=ep_val if ep_val is not None else 1,
+            step=st_val if st_val is not None else 0,
+            event_type=str(data.get("event_type") or EventType.STEP),
+            activations=[float(x) for x in raw_a if x is not None],
+            weight_matrix=[[float(c) for c in row if c is not None] for row in raw_weight if row],
+            plan=_safe_int(data.get("plan"), None),
+            selectplans=[int(x) for x in raw_selectplans if x is not None],
+            threshold=_safe_float(data.get("threshold"), DEFAULT_THRESHOLD),
+            policyvalue=[float(x) for x in raw_policyvalue if x is not None],
+            reused_action=_safe_int(data.get("reused_action"), None),
             extra_fields={
                 k: v for k, v in data.items()
                 if k not in {

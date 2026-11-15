@@ -217,6 +217,28 @@ class TestSAPVisualLogger(unittest.TestCase):
             res = logger.resolve_frame(i)
             self.assertEqual(res.threshold, 0.25)
 
+    def test_load_from_file_with_null_and_malformed_fields(self):
+        """threshold=nullや不正型を含む行があっても後続フレームが切り捨てられず全てロードされるテスト"""
+        log_path = os.path.join(self.test_dir, "null_fields.jsonl")
+        lines = [
+            {"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.3, 0.4], "threshold": None, "plan": None},
+            {"index": 1, "episode": 1, "step": 2, "event_type": "STEP", "A": None, "plan": "invalid", "threshold": "bad"},
+            ["not_a_dict"],
+            {"index": 2, "episode": 1, "step": 3, "event_type": "STEP", "A": [0.7, 0.2], "plan": 0, "threshold": 0.25},
+        ]
+        with open(log_path, "w", encoding="utf-8") as f:
+            for item in lines:
+                f.write(json.dumps(item) + "\n")
+
+        logger = SAPVisualLogger()
+        success = logger.load_from_file(log_path)
+        self.assertTrue(success)
+        self.assertEqual(len(logger.history), 3)
+        self.assertEqual(logger.history[0].index, 0)
+        self.assertIsNone(logger.history[1].plan)
+        self.assertEqual(logger.history[2].index, 2)
+        self.assertEqual(logger.history[2].activations, [0.7, 0.2])
+
 
 if __name__ == "__main__":
     unittest.main()

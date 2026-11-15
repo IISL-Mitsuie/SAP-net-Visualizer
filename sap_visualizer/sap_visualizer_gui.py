@@ -457,7 +457,13 @@ class SAPVisualizerGUI:
             success = self.logger.load_from_folder(chosen_folder)
             if success:
                 self.current_index = 0
-                self.live_follow = True
+                self.live_follow = False
+                self.is_playing = False
+                self.show_config = False
+                self.show_help = False
+                self.chart_view.visible_nodes.clear()
+                self.chart_view.filter_scroll_y = 0
+                self.config_scroll_y = 0
                 self.toast_msg = f"ログを読み込みました: {len(self.logger.history)} フレーム"
                 self.toast_timer = 90
             else:
@@ -472,7 +478,9 @@ class SAPVisualizerGUI:
             self.toast_timer = 90
             return False
 
-        export_surf = self.chart_view.export_chart_surface(self.logger.history, self.logger.max_nodes)
+        export_surf = self.chart_view.export_chart_surface(
+            self.logger.history, self.logger.max_nodes, threshold=self.logger.active_threshold
+        )
         if not export_surf:
             return False
 

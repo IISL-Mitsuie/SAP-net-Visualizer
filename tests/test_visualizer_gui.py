@@ -166,6 +166,69 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         gui.chart_view.scroll_filter(-1)
         self.assertEqual(gui.chart_view.filter_scroll_y, 0)
 
+    def test_open_folder_selector_resets_state(self):
+        """フォルダ再選択成功後にlive_follow=Falseや表示設定がリセットされること"""
+        import unittest.mock as mock
+
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        new_exp_dir = os.path.join(self.test_dir, "new_exp")
+        os.makedirs(new_exp_dir, exist_ok=True)
+        new_log = os.path.join(new_exp_dir, "sap_dynamic_log_new.jsonl")
+        with open(new_log, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"index": 0, "episode": 1, "step": 1, "A": [0.4, 0.6], "threshold": 0.2}) + "\n")
+            f.write(json.dumps({"index": 1, "episode": 1, "step": 2, "A": [0.5, 0.5], "threshold": 0.2}) + "\n")
+
+        gui = SAPVisualizerGUI(self.logger)
+        gui.current_index = 5
+        gui.live_follow = True
+        gui.is_playing = True
+        gui.show_config = True
+        gui.show_help = True
+        gui.chart_view.visible_nodes[0] = False
+        gui.chart_view.filter_scroll_y = 40
+        gui.config_scroll_y = 80
+
+        with mock.patch("sap_visualizer.sap_visualizer_gui.FolderSelectorDialog") as mock_dlg_cls:
+            mock_dlg_cls.return_value.show.return_value = new_exp_dir
+            gui.open_folder_selector()
+
+        self.assertEqual(gui.current_index, 0)
+        self.assertFalse(gui.live_follow)
+        self.assertFalse(gui.is_playing)
+        self.assertFalse(gui.show_config)
+        self.assertFalse(gui.show_help)
+        self.assertEqual(gui.chart_view.visible_nodes, {})
+        self.assertEqual(gui.chart_view.filter_scroll_y, 0)
+        self.assertEqual(gui.config_scroll_y, 0)
+        self.assertEqual(len(gui.logger.history), 2)
+
+    def test_export_chart_includes_threshold_and_handles_empty_activations(self):
+        """export_chart_surfaceに閾値線が描かれ、A=[]フレームでも0.0へ急落しないこと"""
+        from sap_visualizer.theme import COLOR_ACCENT_RED, NODE_COLORS
+
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        f0 = LogFrame.from_dict({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.8], "threshold": 0.5})
+        f1 = LogFrame.from_dict({"index": 1, "episode": 1, "step": 2, "event_type": "WEIGHT_UPDATE", "A": [], "threshold": 0.5})
+        f2 = LogFrame.from_dict({"index": 2, "episode": 1, "step": 3, "event_type": "STEP", "A": [0.8], "threshold": 0.5})
+        self.logger.history = [f0, f1, f2]
+        self.logger.max_nodes = 1
+        self.logger._update_metadata_cache()
+
+        gui = SAPVisualizerGUI(self.logger)
+        surf = gui.chart_view.export_chart_surface(self.logger.history, self.logger.max_nodes, threshold=0.5)
+        self.assertIsNotNone(surf)
+
+        # gx=70, gy=25, gw=800, gh=420 -> threshold=0.5 の Y は 25 + 420 - 210 = 235
+        thresh_y = 25 + 420 - int(0.5 * 420)
+        self.assertEqual(surf.get_at((72, thresh_y))[:3], COLOR_ACCENT_RED)
+
+        # 中間フレーム(x = 70 + 400 = 470)の活性値0.8(y = 25 + 420 - int(0.8*420) = 109)に線色があり、底辺(y=445)に急落していない
+        mid_x = 70 + int((1 / 2) * 800)
+        expected_y = 25 + 420 - int(0.8 * 420)
+        bottom_y = 25 + 420
+        self.assertEqual(surf.get_at((mid_x, expected_y))[:3], NODE_COLORS[0])
+        self.assertNotEqual(surf.get_at((mid_x, bottom_y))[:3], NODE_COLORS[0])
+
 
 if __name__ == "__main__":
     unittest.main()
