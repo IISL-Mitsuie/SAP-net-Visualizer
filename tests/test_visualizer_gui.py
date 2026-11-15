@@ -182,6 +182,8 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         gui.current_index = 5
         gui.live_follow = True
         gui.is_playing = True
+        gui.show_config = True
+        gui.show_help = True
         gui.chart_view.visible_nodes[0] = False
         gui.chart_view.filter_scroll_y = 40
         gui.config_scroll_y = 80
@@ -193,6 +195,8 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         self.assertEqual(gui.current_index, 0)
         self.assertFalse(gui.live_follow)
         self.assertFalse(gui.is_playing)
+        self.assertFalse(gui.show_config)
+        self.assertFalse(gui.show_help)
         self.assertEqual(gui.chart_view.visible_nodes, {})
         self.assertEqual(gui.chart_view.filter_scroll_y, 0)
         self.assertEqual(gui.config_scroll_y, 0)

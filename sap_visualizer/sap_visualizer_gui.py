@@ -459,6 +459,8 @@ class SAPVisualizerGUI:
                 self.current_index = 0
                 self.live_follow = False
                 self.is_playing = False
+                self.show_config = False
+                self.show_help = False
                 self.chart_view.visible_nodes.clear()
                 self.chart_view.filter_scroll_y = 0
                 self.config_scroll_y = 0
