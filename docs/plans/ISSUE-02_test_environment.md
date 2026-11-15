@@ -82,11 +82,11 @@
 
 ## 4. 完了条件
 
-- [ ] 新規環境で `pip install -r requirements-dev.txt` 後、`python -m pytest` が **全件 pass（0 failure, 0 error）** になること
-- [ ] テスト実行時間が **5秒以内**（従来の 66 秒から大幅短縮）になること
-- [ ] テスト実行中に Pygame ウィンドウが一切画面にポップアップしないこと
-- [ ] テスト実行前後で `~/.sap_visualizer/folder_history.json` の内容・タイムスタンプが一切変更されないこと
-- [ ] ネットワーク切断状態（オフライン環境）でも全テストが安定して通過すること
+- [x] 新規環境で `pip install -r requirements-dev.txt` 後、`python -m pytest` が **全件 pass（0 failure, 0 error）** になること
+- [x] テスト実行時間が **5秒以内**（従来の 66 秒から大幅短縮）になること
+- [x] テスト実行中に Pygame ウィンドウが一切画面にポップアップしないこと
+- [x] テスト実行前後で `~/.sap_visualizer/folder_history.json` の内容・タイムスタンプが一切変更されないこと
+- [x] ネットワーク切断状態（オフライン環境）でも全テストが安定して通過すること
 
 ---
 

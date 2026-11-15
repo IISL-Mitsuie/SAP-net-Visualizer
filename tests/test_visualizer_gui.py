@@ -6,6 +6,9 @@ import shutil
 import json
 import gzip
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
 # プロジェクトルートをインポートパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -67,7 +70,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
 
     def test_draw_with_weights(self):
         """重みエッジおよび数値バッジを含む描画処理の正常性テスト"""
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         gui = SAPVisualizerGUI(self.logger)
         # 通常描画
         gui.draw()
@@ -81,7 +83,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
 
     def test_draw_weight_update_frame_with_empty_activations(self):
         """A=[]のWEIGHT_UPDATEフレームでもノードとエッジが正常にフォールバック描画されるテスト"""
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         raw_frame = {
             "index": 10,
             "episode": 1,
@@ -126,7 +127,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
 
     def test_line_chart_selected_knowledge(self):
         """折れ線グラフ画面での選択知識強調および大規模ログ間引き描画テスト"""
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         f0 = LogFrame.from_dict({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.2, 0.9], "weight": [[0.0, 0.2], [0.2, 0.0]], "plan": 1, "selectplans": [0, 1], "threshold": 0.2})
         f1 = LogFrame.from_dict({"index": 1, "episode": 1, "step": 2, "event_type": "STEP", "A": [0.4, 0.7], "weight": [[0.0, 0.3], [0.3, 0.0]], "plan": 0, "selectplans": [1, 1], "threshold": 0.2})
         self.logger.history = [f0, f1]
@@ -139,7 +139,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
 
     def test_line_chart_many_nodes_and_scrolling(self):
         """13個以上の多数知識ノードにおける1列スクロール描画およびスクロール動作テスト"""
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         num_nodes = 20
         f0 = LogFrame.from_dict({
             "index": 0, "episode": 1, "step": 1, "event_type": "STEP",
@@ -170,7 +169,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         """フォルダ再選択成功後にlive_follow=Falseや表示設定がリセットされること"""
         import unittest.mock as mock
 
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         new_exp_dir = os.path.join(self.test_dir, "new_exp")
         os.makedirs(new_exp_dir, exist_ok=True)
         new_log = os.path.join(new_exp_dir, "sap_dynamic_log_new.jsonl")
@@ -206,7 +204,6 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         """export_chart_surfaceに閾値線が描かれ、A=[]フレームでも0.0へ急落しないこと"""
         from sap_visualizer.theme import COLOR_ACCENT_RED, NODE_COLORS
 
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
         f0 = LogFrame.from_dict({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "A": [0.8], "threshold": 0.5})
         f1 = LogFrame.from_dict({"index": 1, "episode": 1, "step": 2, "event_type": "WEIGHT_UPDATE", "A": [], "threshold": 0.5})
         f2 = LogFrame.from_dict({"index": 2, "episode": 1, "step": 3, "event_type": "STEP", "A": [0.8], "threshold": 0.5})
