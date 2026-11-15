@@ -4,7 +4,8 @@ SAP-net Visualizer & Logger Package
 from .constants import APP_VERSION, APP_NAME
 from .sap_visual_logger import SAPVisualLogger
 from .sap_visualizer_gui import SAPVisualizerGUI
-from .folder_selector_gui import FolderHistoryManager, FolderSelectorDialog, select_simulation_folder
+from .history_manager import FolderHistoryManager
+from .folder_selector_gui import FolderSelectorDialog, select_simulation_folder
 from .updater import (
     UpdateInfo,
     compare_versions,

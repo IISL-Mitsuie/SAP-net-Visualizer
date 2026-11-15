@@ -169,7 +169,7 @@ class TestUpdater(unittest.TestCase):
     def test_update_dialog_download_error_callback_no_nameerror(self):
         """_start_downloadのワーカーで例外が発生してもコールバック内でNameErrorにならないこと"""
         import threading
-        from sap_visualizer.folder_selector_gui import UpdateDialog
+        from sap_visualizer.update_dialog import UpdateDialog
 
         dlg = UpdateDialog.__new__(UpdateDialog)
         dlg.update_info = UpdateInfo(
@@ -195,7 +195,7 @@ class TestUpdater(unittest.TestCase):
         dlg.dialog.after.side_effect = lambda _delay, fn: captured_callbacks.append(fn)
         dlg._on_download_failed = MagicMock()
 
-        with patch("sap_visualizer.folder_selector_gui.download_installer", side_effect=RuntimeError("boom")):
+        with patch("sap_visualizer.update_dialog.download_installer", side_effect=RuntimeError("boom")):
             dlg._start_download()
             dlg.download_thread.join(timeout=2.0)
 
@@ -206,11 +206,11 @@ class TestUpdater(unittest.TestCase):
 
     def test_update_dialog_open_installer_folder(self):
         """_open_installer_folderがsubprocess未定義エラーにならず動作すること"""
-        from sap_visualizer.folder_selector_gui import UpdateDialog
+        from sap_visualizer.update_dialog import UpdateDialog
 
         dlg = UpdateDialog.__new__(UpdateDialog)
-        with patch("sap_visualizer.folder_selector_gui.sys.platform", "win32"), \
-             patch("sap_visualizer.folder_selector_gui.subprocess.Popen") as mock_popen:
+        with patch("sap_visualizer.update_dialog.sys.platform", "win32"), \
+             patch("sap_visualizer.update_dialog.subprocess.Popen") as mock_popen:
             dlg._open_installer_folder("C:/temp/setup.exe")
             mock_popen.assert_called_once()
 

@@ -56,11 +56,11 @@
 
 ## 4. 完了条件
 
-- [ ] `FolderHistoryManager` が `sap_visualizer/history_manager.py` に分離され、Tkinter なしでも import 可能なこと
-- [ ] `UpdateDialog` が `sap_visualizer/update_dialog.py` に分離されていること
-- [ ] `folder_selector_gui.py` の行数が大幅に削減（500〜600行程度）されていること
-- [ ] `from sap_visualizer import FolderHistoryManager, FolderSelectorDialog` や `from sap_visualizer.folder_selector_gui import FolderHistoryManager` が従来どおり動作すること
-- [ ] `check.bat` がすべて成功すること
+- [x] `FolderHistoryManager` が `sap_visualizer/history_manager.py` に分離され、Tkinter なしでも import 可能なこと
+- [x] `UpdateDialog` が `sap_visualizer/update_dialog.py` に分離されていること
+- [x] `folder_selector_gui.py` の行数が大幅に削減（1343行 → 830行に削減）されていること
+- [x] `from sap_visualizer import FolderHistoryManager, FolderSelectorDialog` や `from sap_visualizer.folder_selector_gui import FolderHistoryManager` が従来どおり動作すること
+- [x] `check.bat` がすべて成功すること
 
 ---
 
