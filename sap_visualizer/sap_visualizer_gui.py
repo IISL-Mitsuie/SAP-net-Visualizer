@@ -2,11 +2,10 @@
 SAP-net Visualizer メインGUIコントローラーモジュール
 """
 import os
-import sys
 import datetime
 import logging
 import pygame
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
 from .constants import (
     EventType,
@@ -16,19 +15,13 @@ from .constants import (
     DEFAULT_FPS,
     SLIDER_X,
     SLIDER_WIDTH,
-    SLIDER_MARGIN_X,
     SLIDER_Y,
     SLIDER_HEIGHT,
 )
 from .theme import (
     COLOR_BG_MAIN,
-    COLOR_BG_CARD,
-    COLOR_BORDER_DEFAULT,
-    COLOR_BORDER_STRONG,
     COLOR_TEXT_TITLE,
-    COLOR_TEXT_BODY,
     COLOR_TEXT_MUTED,
-    COLOR_TEXT_WHITE,
     COLOR_ACCENT_BLUE,
     COLOR_ACCENT_BLUE_LIGHT,
     COLOR_LIVE_BG,
@@ -40,7 +33,6 @@ from .theme import (
     COLOR_SLIDER_TRACK,
     COLOR_SLIDER_HANDLE,
 )
-from .models import ResolvedFrameInfo
 from .sap_visual_logger import SAPVisualLogger
 from .folder_selector_gui import FolderSelectorDialog
 from .views.base_view import BaseView

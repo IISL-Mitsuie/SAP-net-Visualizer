@@ -14,7 +14,7 @@ import subprocess
 import urllib.request
 import urllib.error
 from dataclasses import dataclass
-from typing import Optional, Callable, Dict, Any, Tuple
+from typing import Optional, Callable, Tuple
 
 from .constants import APP_VERSION
 

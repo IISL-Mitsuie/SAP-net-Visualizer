@@ -2,13 +2,12 @@
 SAP-net Visualizer モーダルダイアログ（設定確認 ＆ 操作ガイド）描画ビュー
 """
 import pygame
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional
 from .base_view import BaseView
 from ..constants import APP_VERSION
 from ..config_loader import load_config_data
 from ..utils.geometry_utils import wrap_text_to_lines
 from ..theme import (
-    COLOR_BG_CARD,
     COLOR_BG_ZEBRA,
     COLOR_BORDER_FOCUS,
     COLOR_BORDER_DEFAULT,
@@ -16,7 +15,6 @@ from ..theme import (
     COLOR_TEXT_TITLE,
     COLOR_TEXT_BODY,
     COLOR_TEXT_MUTED,
-    COLOR_ACCENT_BLUE,
     COLOR_ACCENT_GOLD,
     COLOR_ACCENT_GREEN,
     COLOR_ACCENT_RED,

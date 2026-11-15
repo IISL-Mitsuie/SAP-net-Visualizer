@@ -12,7 +12,7 @@ import threading
 import subprocess
 from typing import List, Dict, Optional, Tuple, Any
 
-from .constants import APP_VERSION, APP_NAME
+from .constants import APP_VERSION
 from .updater import (
     UpdateInfo,
     check_for_updates_async,

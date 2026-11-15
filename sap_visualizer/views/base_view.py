@@ -2,7 +2,7 @@
 SAP-net Visualizer 描画基底クラス BaseView
 """
 import pygame
-from typing import Dict, Any
+from typing import Dict
 from ..theme import FONT_FAMILY_CANDIDATES, COLOR_TEXT_BODY
 from ..constants import SUBHEADER_Y, SUBHEADER_MAX_WIDTH
 
