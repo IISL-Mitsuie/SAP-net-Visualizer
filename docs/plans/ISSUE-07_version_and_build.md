@@ -66,12 +66,12 @@
 
 ## 4. 完了条件
 
-- [ ] バージョンを変更する際、`sap_visualizer/constants.py` の 1 箇所のみを更新すれば、インストーラー名・実行ファイルメタデータ・Linux パッケージ名にすべて反映されること
-- [ ] `requirements.txt` に `pyinstaller` が含まれていないこと
-- [ ] テストが失敗する状態で `python packaging/build.py` を実行するとビルドが中断されること
-- [ ] Inno Setup コンパイルエラー時に `build.py` が終了コード 1 を返すこと
-- [ ] `tests/test_version_consistency.py` が通過すること
-- [ ] `check.bat` がすべて成功すること
+- [x] バージョンを変更する際、`sap_visualizer/constants.py` の 1 箇所のみを更新すれば、インストーラー名・実行ファイルメタデータ・Linux パッケージ名にすべて反映されること
+- [x] `requirements.txt` に `pyinstaller` が含まれていないこと
+- [x] テストが失敗する状態で `python packaging/build.py` を実行するとビルドが中断されること
+- [x] Inno Setup コンパイルエラー時に `build.py` が終了コード 1 を返すこと
+- [x] `tests/test_version_consistency.py` が通過すること
+- [x] `check.bat` がすべて成功すること
 
 ---
 

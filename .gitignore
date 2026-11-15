@@ -31,6 +31,7 @@ MANIFEST
 *.manifest
 *.spec.bak
 *.spec
+!packaging/SAP-net-Visualizer.spec
 
 # Installer Output
 Output/
