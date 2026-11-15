@@ -9,6 +9,7 @@ import datetime
 import logging
 import webbrowser
 import threading
+import subprocess
 from typing import List, Dict, Optional, Tuple, Any
 
 from .constants import APP_VERSION, APP_NAME
@@ -464,8 +465,9 @@ class UpdateDialog:
             except InterruptedError:
                 self.dialog.after(0, lambda: self._on_download_cancelled())
             except Exception as e:
-                logger.error(f"Download failed: {e}")
-                self.dialog.after(0, lambda: self._on_download_failed(str(e)))
+                err_msg = str(e)
+                logger.error(f"Download failed: {err_msg}")
+                self.dialog.after(0, lambda msg=err_msg: self._on_download_failed(msg))
 
         self.download_thread = threading.Thread(target=_download_worker, daemon=True)
         self.download_thread.start()

@@ -91,18 +91,28 @@ class SAPVisualLogger:
                 while True:
                     try:
                         line = f.readline()
-                        if not line:
-                            break
-                        line_str = line.strip()
-                        if line_str:
-                            raw_dict = json.loads(line_str)
-                            self.history.append(LogFrame.from_dict(raw_dict))
-                    except json.JSONDecodeError as je:
-                        logger.warning(f"Skipping corrupted JSON line in log file: {je}")
                     except Exception as err:
                         read_error = err
                         logger.warning(f"Compressed stream ended or corrupted during read: {err}")
                         break
+
+                    if not line:
+                        break
+
+                    line_str = line.strip()
+                    if not line_str:
+                        continue
+
+                    try:
+                        raw_dict = json.loads(line_str)
+                        if not isinstance(raw_dict, dict):
+                            logger.warning("Skipping non-object JSON line in log file")
+                            continue
+                        self.history.append(LogFrame.from_dict(raw_dict))
+                    except json.JSONDecodeError as je:
+                        logger.warning(f"Skipping corrupted JSON line in log file: {je}")
+                    except (ValueError, TypeError, KeyError) as pe:
+                        logger.warning(f"Skipping malformed log frame line: {pe}")
         except Exception as open_err:
             self.last_error_msg = f"ログファイルの解凍/オープンに失敗しました ({type(open_err).__name__}: {open_err})"
             self.last_missing_file_type = "SAP動的パラメータログファイル (オープン不可)"
