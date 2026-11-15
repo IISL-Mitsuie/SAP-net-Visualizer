@@ -340,6 +340,7 @@ class TestUpdater(unittest.TestCase):
                 )
         self.assertFalse((dl_bad_hash / "setup.exe.part").exists())
         self.assertFalse((dl_bad_hash / "setup.exe").exists())
+        self.assertFalse(dl_bad_hash.exists())
 
         # サイズ不一致
         dl_bad_size = work_root / "dl_bad_size"
@@ -355,6 +356,7 @@ class TestUpdater(unittest.TestCase):
                 )
         self.assertFalse((dl_bad_size / "setup.exe.part").exists())
         self.assertFalse((dl_bad_size / "setup.exe").exists())
+        self.assertFalse(dl_bad_size.exists())
 
         # キャンセル時
         dl_cancel = work_root / "dl_cancel"
@@ -370,6 +372,7 @@ class TestUpdater(unittest.TestCase):
                     cancel_event=cancel_ev,
                 )
         self.assertFalse((dl_cancel / "setup.exe.part").exists())
+        self.assertFalse(dl_cancel.exists())
 
     def test_launch_installer_does_not_call_sys_exit(self):
         """launch_installerがPopenを起動しつつsys.exitを呼ばないこと"""

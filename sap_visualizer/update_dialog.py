@@ -376,13 +376,21 @@ class UpdateDialog:
         """インストーラーを起動し、UIイベントループを安全に終了する"""
         try:
             launch_installer(installer_path)
-            self.dialog.destroy()
+            root = None
             try:
                 root = self.parent.winfo_toplevel()
-                root.quit()
-                root.destroy()
             except Exception:
                 pass
+            try:
+                self.dialog.destroy()
+            except Exception:
+                pass
+            if root is not None:
+                try:
+                    root.quit()
+                    root.destroy()
+                except Exception:
+                    pass
         except Exception as e:
             messagebox.showerror("起動エラー", f"インストーラーの起動に失敗しました:\n{e}", parent=self.dialog)
 

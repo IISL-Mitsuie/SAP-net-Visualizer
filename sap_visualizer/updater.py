@@ -7,6 +7,7 @@ import os
 import sys
 import re
 import json
+import shutil
 import hashlib
 import logging
 import threading
@@ -335,6 +336,7 @@ def download_installer(
                 os.remove(part_path)
             except OSError:
                 pass
+        shutil.rmtree(work_dir, ignore_errors=True)
         raise
 
 
