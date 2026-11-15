@@ -114,6 +114,56 @@ class TestFolderHistoryManager(unittest.TestCase):
         self.assertTrue(detailed[2]["log_found"])
         self.assertIn("正常", detailed[2]["status"])
 
+    def test_history_manager_module_has_no_tkinter_dependency(self):
+        """history_managerモジュールがtkinterに依存せずにインポート可能であること"""
+        import ast
+        import subprocess
+        import sap_visualizer.history_manager as hm_mod
+
+        with open(hm_mod.__file__, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=hm_mod.__file__)
+
+        imported_names = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_names.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported_names.append(node.module)
+
+        self.assertFalse(
+            any("tkinter" in name for name in imported_names),
+            msg=f"tkinter import found in history_manager.py: {imported_names}",
+        )
+
+        # tkinter無効環境でもインポート・インスタンス化できること
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.modules['tkinter'] = None; "
+                "from sap_visualizer.history_manager import FolderHistoryManager; "
+                "assert FolderHistoryManager is not None",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_backward_compatible_reexports(self):
+        """folder_selector_guiおよびパッケージルートからの後方互換インポートが維持されること"""
+        from sap_visualizer import FolderHistoryManager as PkgHistoryMgr
+        from sap_visualizer.history_manager import FolderHistoryManager as DirectHistoryMgr
+        from sap_visualizer.folder_selector_gui import (
+            FolderHistoryManager as CompatHistoryMgr,
+            UpdateDialog as CompatUpdateDialog,
+        )
+        from sap_visualizer.update_dialog import UpdateDialog as DirectUpdateDialog
+
+        self.assertIs(PkgHistoryMgr, DirectHistoryMgr)
+        self.assertIs(CompatHistoryMgr, DirectHistoryMgr)
+        self.assertIs(CompatUpdateDialog, DirectUpdateDialog)
+
 
 if __name__ == "__main__":
     unittest.main()
