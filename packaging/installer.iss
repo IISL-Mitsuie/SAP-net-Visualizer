@@ -1,5 +1,7 @@
 #define MyAppName "SAP-net Visualizer"
-#define MyAppVersion "1.1.0"
+#ifndef MyAppVersion
+  #error "MyAppVersion must be supplied via /DMyAppVersion=<version>"
+#endif
 #define MyAppPublisher "IISL Mitsuie Lab"
 #define MyAppExeName "SAP-net-Visualizer.exe"
 
@@ -24,6 +26,7 @@ DisableProgramGroupPage=yes
 CloseApplications=yes
 CloseApplicationsFilter=*.exe
 RestartApplications=no
+AppMutex=SAPNetVisualizer_AppMutex
 
 [Languages]
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"

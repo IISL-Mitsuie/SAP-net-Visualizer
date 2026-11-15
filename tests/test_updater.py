@@ -1,9 +1,17 @@
 """
 Unit tests for the SAP-net Visualizer updater module
 """
-import unittest
-from unittest.mock import patch, MagicMock
+import hashlib
+import importlib.util
+import io
 import json
+import os
+import shutil
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 import urllib.error
 
 from sap_visualizer.updater import (
@@ -11,7 +19,10 @@ from sap_visualizer.updater import (
     compare_versions,
     is_newer_version,
     fetch_latest_release_info,
+    download_installer,
+    launch_installer,
     UpdateInfo,
+    UpdateVerificationError,
 )
 
 
@@ -213,6 +224,193 @@ class TestUpdater(unittest.TestCase):
              patch("sap_visualizer.update_dialog.subprocess.Popen") as mock_popen:
             dlg._open_installer_folder("C:/temp/setup.exe")
             mock_popen.assert_called_once()
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_latest_release_info_parses_sha256_asset_and_digest(self, mock_urlopen):
+        """fetch_latest_release_infoが.sha256アセットおよびasset.digestから期待SHA-256を取得すること"""
+        payload_bytes = b"installer binary content"
+        expected_hash = hashlib.sha256(payload_bytes).hexdigest()
+
+        # 1. .sha256 アセットからの取得
+        api_json = {
+            "tag_name": "v1.3.0",
+            "name": "v1.3.0",
+            "body": "",
+            "html_url": "https://example.com/v1.3.0",
+            "published_at": "2026-10-01T00:00:00Z",
+            "assets": [
+                {
+                    "name": "SAP_net_Visualizer_Setup_v1.3.0.exe",
+                    "browser_download_url": "https://example.com/setup.exe",
+                    "size": len(payload_bytes),
+                },
+                {
+                    "name": "SAP_net_Visualizer_Setup_v1.3.0.exe.sha256",
+                    "browser_download_url": "https://example.com/setup.exe.sha256",
+                    "size": 128,
+                },
+            ],
+        }
+        api_cm = MagicMock()
+        api_cm.status = 200
+        api_cm.read.return_value = json.dumps(api_json).encode("utf-8")
+        api_cm.__enter__.return_value = api_cm
+
+        sha_cm = MagicMock()
+        sha_cm.status = 200
+        sha_cm.read.return_value = f"{expected_hash}  SAP_net_Visualizer_Setup_v1.3.0.exe\n".encode("utf-8")
+        sha_cm.__enter__.return_value = sha_cm
+
+        mock_urlopen.side_effect = [api_cm, sha_cm]
+        info = fetch_latest_release_info(current_version="1.1.0")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.expected_sha256, expected_hash)
+
+        # 2. GitHub API asset.digest フィールドからの取得
+        api_digest_json = {
+            "tag_name": "v1.4.0",
+            "name": "v1.4.0",
+            "body": "",
+            "html_url": "https://example.com/v1.4.0",
+            "published_at": "2026-11-01T00:00:00Z",
+            "assets": [
+                {
+                    "name": "SAP_net_Visualizer_Setup_v1.4.0.exe",
+                    "browser_download_url": "https://example.com/setup4.exe",
+                    "size": 123,
+                    "digest": f"sha256:{expected_hash.upper()}",
+                }
+            ],
+        }
+        digest_cm = MagicMock()
+        digest_cm.status = 200
+        digest_cm.read.return_value = json.dumps(api_digest_json).encode("utf-8")
+        digest_cm.__enter__.return_value = digest_cm
+        mock_urlopen.side_effect = [digest_cm]
+
+        info2 = fetch_latest_release_info(current_version="1.1.0")
+        self.assertIsNotNone(info2)
+        self.assertEqual(info2.expected_sha256, expected_hash)
+
+    def _mock_download_response(self, content: bytes):
+        class _FakeResp(io.BytesIO):
+            def __init__(self, data: bytes):
+                super().__init__(data)
+                self.headers = {"Content-Length": str(len(data))}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.close()
+
+        return _FakeResp(content)
+
+    def test_download_installer_verifies_hash_and_cleans_part_on_mismatch(self):
+        """SHA-256・サイズ検証成功時は正規ファイルが返り、不一致時は.partが削除され例外になること"""
+        work_root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(work_root, ignore_errors=True))
+
+        payload = b"valid installer payload bytes" * 100
+        good_hash = hashlib.sha256(payload).hexdigest()
+
+        with patch("sap_visualizer.updater.tempfile.mkdtemp", side_effect=lambda prefix="": str(work_root / "dl1")), \
+             patch("urllib.request.urlopen", return_value=self._mock_download_response(payload)):
+            os.makedirs(work_root / "dl1", exist_ok=True)
+            dest = download_installer(
+                "https://example.com/SAP_net_Visualizer_Setup_v1.2.0.exe",
+                target_filename="SAP_net_Visualizer_Setup_v1.2.0.exe",
+                expected_size=len(payload),
+                expected_sha256=good_hash,
+            )
+        self.assertTrue(os.path.exists(dest))
+        self.assertFalse(os.path.exists(dest + ".part"))
+
+        # SHA-256 不一致
+        dl_bad_hash = work_root / "dl_bad_hash"
+        os.makedirs(dl_bad_hash, exist_ok=True)
+        with patch("sap_visualizer.updater.tempfile.mkdtemp", return_value=str(dl_bad_hash)), \
+             patch("urllib.request.urlopen", return_value=self._mock_download_response(payload)):
+            with self.assertRaises(UpdateVerificationError):
+                download_installer(
+                    "https://example.com/setup.exe",
+                    target_filename="setup.exe",
+                    expected_size=len(payload),
+                    expected_sha256="0" * 64,
+                )
+        self.assertFalse((dl_bad_hash / "setup.exe.part").exists())
+        self.assertFalse((dl_bad_hash / "setup.exe").exists())
+        self.assertFalse(dl_bad_hash.exists())
+
+        # サイズ不一致
+        dl_bad_size = work_root / "dl_bad_size"
+        os.makedirs(dl_bad_size, exist_ok=True)
+        with patch("sap_visualizer.updater.tempfile.mkdtemp", return_value=str(dl_bad_size)), \
+             patch("urllib.request.urlopen", return_value=self._mock_download_response(payload)):
+            with self.assertRaises(UpdateVerificationError):
+                download_installer(
+                    "https://example.com/setup.exe",
+                    target_filename="setup.exe",
+                    expected_size=len(payload) + 10,
+                    expected_sha256=good_hash,
+                )
+        self.assertFalse((dl_bad_size / "setup.exe.part").exists())
+        self.assertFalse((dl_bad_size / "setup.exe").exists())
+        self.assertFalse(dl_bad_size.exists())
+
+        # キャンセル時
+        dl_cancel = work_root / "dl_cancel"
+        os.makedirs(dl_cancel, exist_ok=True)
+        cancel_ev = threading.Event()
+        cancel_ev.set()
+        with patch("sap_visualizer.updater.tempfile.mkdtemp", return_value=str(dl_cancel)), \
+             patch("urllib.request.urlopen", return_value=self._mock_download_response(payload)):
+            with self.assertRaises(InterruptedError):
+                download_installer(
+                    "https://example.com/setup.exe",
+                    target_filename="setup.exe",
+                    cancel_event=cancel_ev,
+                )
+        self.assertFalse((dl_cancel / "setup.exe.part").exists())
+        self.assertFalse(dl_cancel.exists())
+
+    def test_launch_installer_does_not_call_sys_exit(self):
+        """launch_installerがPopenを起動しつつsys.exitを呼ばないこと"""
+        temp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+        dummy_exe = temp_dir / "setup.exe"
+        dummy_exe.write_bytes(b"MZ")
+
+        with patch("sap_visualizer.updater.subprocess.Popen") as mock_popen, \
+             patch("sap_visualizer.updater.sys.exit") as mock_exit:
+            launch_installer(str(dummy_exe))
+            mock_popen.assert_called_once()
+            mock_exit.assert_not_called()
+
+    def test_build_write_sha256_file_and_app_mutex_configured(self):
+        """build.write_sha256_fileの出力とinstaller.iss/main.pyのAppMutex定義を検証"""
+        root_dir = Path(__file__).resolve().parent.parent
+        build_path = root_dir / "packaging" / "build.py"
+        spec = importlib.util.spec_from_file_location("sap_packaging_build_u", build_path)
+        build_mod = importlib.util.module_from_spec(spec)
+        assert spec is not None and spec.loader is not None
+        spec.loader.exec_module(build_mod)
+
+        temp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+        sample_file = temp_dir / "SAP_net_Visualizer_Setup_v1.1.0.exe"
+        content = b"setup binary test data"
+        sample_file.write_bytes(content)
+
+        sha_path = build_mod.write_sha256_file(sample_file)
+        self.assertTrue(sha_path.exists())
+        expected = hashlib.sha256(content).hexdigest()
+        self.assertEqual(sha_path.read_text(encoding="utf-8").strip(), f"{expected}  {sample_file.name}")
+
+        iss_text = (root_dir / "packaging" / "installer.iss").read_text(encoding="utf-8")
+        main_text = (root_dir / "main.py").read_text(encoding="utf-8")
+        self.assertIn("AppMutex=SAPNetVisualizer_AppMutex", iss_text)
+        self.assertIn("SAPNetVisualizer_AppMutex", main_text)
 
 
 if __name__ == "__main__":
