@@ -3,6 +3,7 @@ SAP-net Visualizer メインエントリーポイント
 """
 import os
 import sys
+import ctypes
 import logging
 import platform
 
@@ -27,14 +28,27 @@ from sap_visualizer import (
     install_exception_hooks,
 )
 
+APP_MUTEX_NAME = "SAPNetVisualizer_AppMutex"
+
+
+def acquire_app_mutex():
+    """Windows環境でInno SetupのAppMutex用名前付きミューテックスを取得して保持する"""
+    if sys.platform != "win32":
+        return None
+    try:
+        return ctypes.windll.kernel32.CreateMutexW(None, False, APP_MUTEX_NAME)
+    except Exception:
+        return None
+
 
 def main():
+    _app_mutex_handle = acquire_app_mutex()
     log_path = setup_logging()
     install_exception_hooks()
     logger_instance = logging.getLogger("main")
     logger_instance.info(
         f"SAP-net Visualizer v{APP_VERSION} started "
-        f"(Python {platform.python_version()}, OS {platform.platform()}, log={log_path})"
+        f"(Python {platform.python_version()}, OS {platform.platform()}, log={log_path}, mutex={bool(_app_mutex_handle)})"
     )
 
     print("=" * 60)

@@ -15,7 +15,7 @@ from .constants import APP_VERSION
 from .updater import (
     UpdateInfo,
     download_installer,
-    launch_installer_and_exit,
+    launch_installer,
 )
 from .theme import (
     TK_BG_MAIN,
@@ -306,7 +306,9 @@ class UpdateDialog:
                     self.update_info.installer_download_url,
                     target_filename=self.update_info.installer_name,
                     progress_callback=_on_progress,
-                    cancel_event=self.cancel_event
+                    cancel_event=self.cancel_event,
+                    expected_size=self.update_info.installer_size or None,
+                    expected_sha256=self.update_info.expected_sha256,
                 )
 
                 self.dialog.after(0, lambda: self._on_download_complete(installer_path))
@@ -371,9 +373,24 @@ class UpdateDialog:
             logger.warning(f"Failed to open folder: {e}")
 
     def _launch_installer(self, installer_path: str) -> None:
-        """インストーラーを起動してアプリを終了"""
+        """インストーラーを起動し、UIイベントループを安全に終了する"""
         try:
-            launch_installer_and_exit(installer_path)
+            launch_installer(installer_path)
+            root = None
+            try:
+                root = self.parent.winfo_toplevel()
+            except Exception:
+                pass
+            try:
+                self.dialog.destroy()
+            except Exception:
+                pass
+            if root is not None:
+                try:
+                    root.quit()
+                    root.destroy()
+                except Exception:
+                    pass
         except Exception as e:
             messagebox.showerror("起動エラー", f"インストーラーの起動に失敗しました:\n{e}", parent=self.dialog)
 

@@ -7,6 +7,8 @@ import os
 import sys
 import re
 import json
+import shutil
+import hashlib
 import logging
 import threading
 import tempfile
@@ -23,6 +25,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_REPO = "IISL-Mitsuie/SAP-net-Visualizer"
 GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/{repo}/releases/latest"
 DEFAULT_TIMEOUT_SEC = 3.0
+_SHA256_RE = re.compile(r"\b([0-9a-fA-F]{64})\b")
+
+
+class UpdateVerificationError(Exception):
+    """ダウンロードしたインストーラーの検証（サイズ・SHA-256等）に失敗した場合の例外"""
 
 
 @dataclass
@@ -37,7 +44,36 @@ class UpdateInfo:
     installer_download_url: Optional[str] = None  # Setup.exe のダウンロードURL
     installer_name: Optional[str] = None          # 例: "SAP_net_Visualizer_Setup_v1.1.0.exe"
     installer_size: int = 0                       # バイト数
+    expected_sha256: Optional[str] = None         # 期待される SHA-256 (hex lowercase)
     is_update_available: bool = False             # 現在のバージョンより新しいか
+
+
+def _extract_sha256_digest(digest_value: Optional[str]) -> Optional[str]:
+    """GitHub API asset.digest ('sha256:<hex>') 等から正規化済み SHA-256 を抽出"""
+    if not digest_value or not isinstance(digest_value, str):
+        return None
+    cleaned = digest_value.strip()
+    if cleaned.lower().startswith("sha256:"):
+        cleaned = cleaned[7:].strip()
+    m = _SHA256_RE.fullmatch(cleaned)
+    return m.group(1).lower() if m else None
+
+
+def _parse_sha256_text(text: str, target_filename: Optional[str] = None) -> Optional[str]:
+    """sha256sum / certutil 形式のテキストから期待 SHA-256 ハッシュを抽出する"""
+    if not text:
+        return None
+    first_match = None
+    for line in text.splitlines():
+        m = _SHA256_RE.search(line)
+        if not m:
+            continue
+        digest = m.group(1).lower()
+        if target_filename and target_filename in line:
+            return digest
+        if first_match is None:
+            first_match = digest
+    return first_match
 
 
 def parse_version_tuple(version_str: str) -> Tuple[int, ...]:
@@ -128,10 +164,11 @@ def fetch_latest_release_info(
         release_url = data.get("html_url") or f"https://github.com/{repo}/releases"
         published_at = data.get("published_at", "")
 
-        # アセット一覧からインストーラー (.exe) を探索
+        # アセット一覧からインストーラー (.exe) と SHA-256 チェックサムアセットを探索
         installer_url = None
         installer_name = None
         installer_size = 0
+        expected_sha256 = None
 
         assets = data.get("assets", [])
         for asset in assets:
@@ -141,9 +178,38 @@ def fetch_latest_release_info(
                 installer_url = asset.get("browser_download_url")
                 installer_name = name
                 installer_size = asset.get("size", 0)
+                expected_sha256 = _extract_sha256_digest(asset.get("digest"))
                 if "setup" in name.lower():
                     # Setup を含むものを最優先
                     break
+
+        if not expected_sha256:
+            sha_asset = None
+            if installer_name:
+                exact_sha_name = f"{installer_name}.sha256".lower()
+                for asset in assets:
+                    if asset.get("name", "").lower() == exact_sha_name:
+                        sha_asset = asset
+                        break
+            if sha_asset is None:
+                for asset in assets:
+                    if asset.get("name", "").lower().endswith(".sha256"):
+                        sha_asset = asset
+                        break
+
+            if sha_asset and sha_asset.get("browser_download_url"):
+                try:
+                    sha_req = urllib.request.Request(
+                        sha_asset["browser_download_url"],
+                        headers={"User-Agent": f"SAP-net-Visualizer/{current_version}"},
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(sha_req, timeout=timeout) as sha_resp:
+                        if sha_resp.status == 200:
+                            sha_text = sha_resp.read().decode("utf-8", errors="replace")
+                            expected_sha256 = _parse_sha256_text(sha_text, target_filename=installer_name)
+                except Exception as e:
+                    logger.debug(f"Failed to fetch .sha256 asset: {e}")
 
         update_available = is_newer_version(current_version, latest_version)
 
@@ -157,6 +223,7 @@ def fetch_latest_release_info(
             installer_download_url=installer_url,
             installer_name=installer_name,
             installer_size=installer_size,
+            expected_sha256=expected_sha256,
             is_update_available=update_available,
         )
 
@@ -199,45 +266,84 @@ def download_installer(
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
     chunk_size: int = 64 * 1024,
+    expected_size: Optional[int] = None,
+    expected_sha256: Optional[str] = None,
 ) -> str:
     """
-    指定されたURLからインストーラーを %TEMP% フォルダにダウンロードする。
-    戻り値: ダウンロードされたファイルの絶対パス
+    指定されたURLから専用一時フォルダに .part ファイルとしてダウンロードし、
+    サイズおよび SHA-256 検証に成功した場合のみ正規ファイルへ昇格してパスを返す。
     """
-    temp_dir = tempfile.gettempdir()
-    if not target_filename:
-        target_filename = os.path.basename(download_url.split("?")[0]) or "SAP_net_Visualizer_Setup.exe"
+    work_dir = tempfile.mkdtemp(prefix="sap_vis_update_")
+    raw_name = target_filename or os.path.basename(download_url.split("?")[0])
+    safe_name = os.path.basename(raw_name) if raw_name else ""
+    if not safe_name:
+        safe_name = "SAP_net_Visualizer_Setup.exe"
 
-    dest_path = os.path.join(temp_dir, target_filename)
+    part_path = os.path.join(work_dir, f"{safe_name}.part")
+    dest_path = os.path.join(work_dir, safe_name)
 
     headers = {
         "User-Agent": f"SAP-net-Visualizer/{APP_VERSION}",
     }
     req = urllib.request.Request(download_url, headers=headers)
 
-    with urllib.request.urlopen(req, timeout=30.0) as response, open(dest_path, "wb") as out_file:
-        total_size = int(response.headers.get("Content-Length", 0))
-        downloaded = 0
+    hasher = hashlib.sha256()
+    downloaded = 0
+    header_total_size = 0
 
-        while True:
-            if cancel_event and cancel_event.is_set():
-                raise InterruptedError("Download was cancelled by user.")
+    try:
+        with urllib.request.urlopen(req, timeout=30.0) as response, open(part_path, "wb") as out_file:
+            raw_len = response.headers.get("Content-Length") if response.headers else None
+            header_total_size = int(raw_len) if raw_len and str(raw_len).isdigit() else 0
+            progress_total = expected_size if (expected_size and expected_size > 0) else header_total_size
 
-            chunk = response.read(chunk_size)
-            if not chunk:
-                break
-            out_file.write(chunk)
-            downloaded += len(chunk)
+            while True:
+                if cancel_event and cancel_event.is_set():
+                    raise InterruptedError("Download was cancelled by user.")
 
-            if progress_callback:
-                progress_callback(downloaded, total_size)
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                out_file.write(chunk)
+                hasher.update(chunk)
+                downloaded += len(chunk)
 
-    return dest_path
+                if progress_callback:
+                    progress_callback(downloaded, progress_total)
+
+        if expected_size is not None and expected_size > 0 and downloaded != expected_size:
+            raise UpdateVerificationError(
+                f"Downloaded size mismatch: expected {expected_size} bytes, got {downloaded} bytes."
+            )
+        if (expected_size is None or expected_size <= 0) and header_total_size > 0 and downloaded != header_total_size:
+            raise UpdateVerificationError(
+                f"Downloaded size mismatch against Content-Length: expected {header_total_size} bytes, got {downloaded} bytes."
+            )
+
+        if expected_sha256:
+            normalized_expected = _extract_sha256_digest(expected_sha256)
+            actual_sha256 = hasher.hexdigest().lower()
+            if not normalized_expected or actual_sha256 != normalized_expected:
+                raise UpdateVerificationError(
+                    f"SHA-256 verification failed: expected {expected_sha256}, got {actual_sha256}."
+                )
+
+        os.replace(part_path, dest_path)
+        return dest_path
+    except Exception:
+        if os.path.exists(part_path):
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
 
 
-def launch_installer_and_exit(installer_path: str, silent: bool = False) -> None:
+def launch_installer(installer_path: str, silent: bool = False) -> None:
     """
-    ダウンロードしたインストーラーをバックグラウンドで起動し、現在のプロセスを安全に終了する。
+    ダウンロードしたインストーラーをバックグラウンドプロセスとして起動する。
+    呼び出し元のイベントループやプロセス終了は行わない。
     """
     if not os.path.exists(installer_path):
         raise FileNotFoundError(f"Installer not found: {installer_path}")
@@ -248,7 +354,7 @@ def launch_installer_and_exit(installer_path: str, silent: bool = False) -> None
         args.extend(["/VERYSILENT", "/NORESTART"])
 
     logger.info(f"Launching installer: {args}")
-    
+
     # 新しい独立したプロセスとして起動（Windows環境で親プロセス終了後も独立実行）
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -256,5 +362,10 @@ def launch_installer_and_exit(installer_path: str, silent: bool = False) -> None
     else:
         subprocess.Popen(args, close_fds=True)
 
-    # アプリケーションプロセスを正常終了
+
+def launch_installer_and_exit(installer_path: str, silent: bool = False) -> None:
+    """
+    後方互換ラッパー: インストーラーを起動し、現在のプロセスを終了する。
+    """
+    launch_installer(installer_path, silent=silent)
     sys.exit(0)

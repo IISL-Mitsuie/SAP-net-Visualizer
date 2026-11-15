@@ -26,6 +26,7 @@ DisableProgramGroupPage=yes
 CloseApplications=yes
 CloseApplicationsFilter=*.exe
 RestartApplications=no
+AppMutex=SAPNetVisualizer_AppMutex
 
 [Languages]
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"

@@ -5,6 +5,7 @@ builds the PyInstaller binary, compiles the Inno Setup installer,
 and cleans up all temporary build environments.
 """
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -18,6 +19,22 @@ from pathlib import Path
 from typing import Optional
 
 APP_VERSION_PATTERN = re.compile(r'^APP_VERSION\s*=\s*["\'](\d+\.\d+\.\d+)["\']', re.MULTILINE)
+
+
+def write_sha256_file(file_path: Path) -> Path:
+    """対象ファイルの SHA-256 チェックサムを計算し、<file_path>.sha256 に書き出す"""
+    target = Path(file_path)
+    hasher = hashlib.sha256()
+    with open(target, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    digest = hasher.hexdigest().lower()
+    sha_path = Path(f"{target}.sha256")
+    sha_path.write_text(f"{digest}  {target.name}\n", encoding="utf-8")
+    return sha_path
 
 
 def read_app_version(constants_path: Optional[Path] = None) -> str:
@@ -289,6 +306,8 @@ def main(argv=None):
     setup_exe = installer_output_dir / f"SAP_net_Visualizer_Setup_v{app_version}.exe"
     if setup_exe.exists():
         print(f"  [SUCCESS] Windows Installer: {setup_exe}")
+        sha_file = write_sha256_file(setup_exe)
+        print(f"  [SUCCESS] SHA-256 Checksum : {sha_file}")
     standalone_exe = dist_dir / "SAP-net-Visualizer" / "SAP-net-Visualizer.exe"
     if standalone_exe.exists():
         print(f"  [SUCCESS] Standalone Binary: {standalone_exe}")
