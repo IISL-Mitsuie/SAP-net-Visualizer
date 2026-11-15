@@ -308,6 +308,33 @@ class TestSAPVisualLogger(unittest.TestCase):
         self.assertEqual(res_last.activations, [0.5, 0.5])
         self.assertEqual(res_last.plan, 0)
 
+    def test_resolve_frame_rebuilds_when_history_replaced_same_length_or_threshold_changed(self):
+        """logger.historyを同じ長さの別リストに差し替えたり閾値変更した際にキャッシュが更新されること"""
+        from sap_visualizer.models import LogFrame
+
+        logger = SAPVisualLogger()
+        logger.history = [
+            LogFrame(index=0, episode=1, step=1, event_type="STEP", activations=[0.1, 0.2], weight_matrix=[], plan=0, selectplans=[0], threshold=0.2),
+            LogFrame(index=1, episode=1, step=2, event_type="STEP", activations=[0.3, 0.4], weight_matrix=[], plan=1, selectplans=[1], threshold=0.2),
+        ]
+        self.assertEqual(logger.resolve_frame(0).activations, [0.1, 0.2])
+        self.assertEqual(logger.resolve_frame(1).plan, 1)
+        self.assertEqual(logger.resolve_frame(0).threshold, 0.2)
+
+        # 同じ要素数の別リストに差し替え
+        logger.history = [
+            LogFrame(index=0, episode=2, step=1, event_type="STEP", activations=[0.8, 0.9], weight_matrix=[], plan=2, selectplans=[2], threshold=0.5),
+            LogFrame(index=1, episode=2, step=2, event_type="STEP", activations=[], weight_matrix=[], plan=None, selectplans=[]),
+        ]
+        self.assertEqual(logger.resolve_frame(0).activations, [0.8, 0.9])
+        self.assertEqual(logger.resolve_frame(1).activations, [0.8, 0.9])
+        self.assertEqual(logger.resolve_frame(1).plan, 2)
+
+        # config_threshold / dominant_threshold の変更にも追従する
+        logger.config_threshold = 0.75
+        self.assertEqual(logger.resolve_frame(0).threshold, 0.75)
+        self.assertEqual(logger.resolve_frame(1).threshold, 0.75)
+
 
 if __name__ == "__main__":
     unittest.main()

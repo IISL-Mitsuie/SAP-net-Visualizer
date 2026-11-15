@@ -453,6 +453,7 @@ class SAPVisualizerGUI:
                 self.is_playing = False
                 self.show_config = False
                 self.show_help = False
+                self.overlays_view.clear_config_cache()
                 self.chart_view.visible_nodes.clear()
                 self.chart_view.filter_scroll_y = 0
                 self.config_scroll_y = 0

@@ -31,6 +31,17 @@ class SAPVisualLogger:
         self.last_error_msg: str = ""
         self.last_missing_file_type: str = ""
         self._resolved_cache: List[ResolvedFrameInfo] = []
+        self._resolved_cache_key: Optional[tuple] = None
+
+    def _get_history_cache_key(self) -> tuple:
+        return (
+            id(self.history),
+            len(self.history),
+            id(self.history[0]) if self.history else 0,
+            id(self.history[-1]) if self.history else 0,
+            self.config_threshold,
+            self.dominant_threshold,
+        )
 
     def _update_metadata_cache(self) -> None:
         """ログ読み込み完了時にメタデータ（最大ノード数、パラメータ閾値、事前解決キャッシュ等）を計算してキャッシュ"""
@@ -97,6 +108,7 @@ class SAPVisualLogger:
                 )
             )
         self._resolved_cache = cache
+        self._resolved_cache_key = self._get_history_cache_key()
 
     @property
     def active_threshold(self) -> float:
@@ -119,6 +131,7 @@ class SAPVisualLogger:
         self.max_nodes = 0
         self.log_file_path = log_file_path
         self._resolved_cache = []
+        self._resolved_cache_key = None
 
         if not os.path.exists(log_file_path):
             self.last_error_msg = f"SAP動的ログファイルが見つかりません: {log_file_path}"
@@ -239,7 +252,7 @@ class SAPVisualLogger:
                 event_type=EventType.STEP
             )
 
-        if len(self._resolved_cache) != len(self.history):
+        if self._resolved_cache_key != self._get_history_cache_key():
             self._rebuild_resolved_cache()
 
         return self._resolved_cache[index]
