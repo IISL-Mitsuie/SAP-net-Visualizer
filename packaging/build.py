@@ -231,6 +231,7 @@ def main(argv=None):
     except Exception as e:
         print(f"[ERROR] Failed to install dependencies: {e}")
         safe_rmtree(venv_dir)
+        safe_rmtree(build_dir)
         return 1
 
     # 3. Build standalone binary with PyInstaller
