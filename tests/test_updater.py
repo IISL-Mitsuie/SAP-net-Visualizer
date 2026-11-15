@@ -3,7 +3,6 @@ Unit tests for the SAP-net Visualizer updater module
 """
 import unittest
 from unittest.mock import patch, MagicMock
-import io
 import json
 import urllib.error
 

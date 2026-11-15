@@ -1,3 +1,17 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = [
+    "reference",
+    "log_AI-output",
+    "dist",
+    "dist_installer"
+]
+
+[tool.ruff.lint]
+select = ["F", "E9"]
+

@@ -9,11 +9,8 @@ from ..models import ResolvedFrameInfo
 from ..utils.geometry_utils import calculate_circular_node_positions, calculate_edge_badge_position
 from ..theme import (
     COLOR_BG_CARD,
-    COLOR_BORDER_STRONG,
     COLOR_BORDER_DEFAULT,
-    COLOR_TEXT_TITLE,
     COLOR_TEXT_BODY,
-    COLOR_TEXT_MUTED,
     COLOR_TEXT_WHITE,
     COLOR_ACCENT_GOLD,
     COLOR_ACCENT_GREEN,

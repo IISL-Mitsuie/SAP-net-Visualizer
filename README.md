@@ -236,6 +236,22 @@ SAP-net-Visualizer/
 
 ---
 
+## 開発者向け品質チェック（ローカル品質ゲート）
+
+変更後は以下のコマンドで静的解析（`ruff`）と単体テスト（`pytest`）を一括検証できます。
+
+```powershell
+.\check.bat
+```
+
+`git push` 前に自動実行したい場合は、以下のコマンドで同梱の git フックを有効化してください。
+
+```bash
+git config core.hooksPath .githooks
+```
+
+---
+
 ## 著作権・ライセンス
 
 Copyright (C) 2026 Mitsuie. All rights reserved.

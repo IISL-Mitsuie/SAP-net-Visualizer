@@ -97,10 +97,10 @@
 
 ## 4. 完了条件
 
-- [ ] `check.bat` を実行し、`ruff check` と `pytest` が両方実行されて `[OK] all checks passed` で正常終了（終了コード 0）すること
-- [ ] `python -m ruff check --select F,E9 sap_visualizer main.py packaging tests` がエラー 0 件になること
-- [ ] 意図的に未使用インポートや構文エラーを混入させた場合に `check.bat` が検知して終了コード 1 で停止すること
-- [ ] 既存の全テストが通過すること
+- [x] `check.bat` を実行し、`ruff check` と `pytest` が両方実行されて `[OK] all checks passed` で正常終了（終了コード 0）すること
+- [x] `python -m ruff check --select F,E9 sap_visualizer main.py packaging tests` がエラー 0 件になること
+- [x] 意図的に未使用インポートや構文エラーを混入させた場合に `check.bat` が検知して終了コード 1 で停止すること
+- [x] 既存の全テストが通過すること
 
 ---
 
