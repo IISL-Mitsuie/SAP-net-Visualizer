@@ -9,11 +9,13 @@ from .folder_selector_gui import FolderSelectorDialog, select_simulation_folder
 from .logging_setup import get_log_dir, setup_logging, install_exception_hooks
 from .updater import (
     UpdateInfo,
+    UpdateVerificationError,
     compare_versions,
     is_newer_version,
     fetch_latest_release_info,
     check_for_updates_async,
     download_installer,
+    launch_installer,
     launch_installer_and_exit,
 )
 
@@ -32,11 +34,13 @@ __all__ = [
     "setup_logging",
     "install_exception_hooks",
     "UpdateInfo",
+    "UpdateVerificationError",
     "compare_versions",
     "is_newer_version",
     "fetch_latest_release_info",
     "check_for_updates_async",
     "download_installer",
+    "launch_installer",
     "launch_installer_and_exit",
 ]
 
