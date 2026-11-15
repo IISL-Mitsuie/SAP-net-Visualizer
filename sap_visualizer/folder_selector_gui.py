@@ -70,8 +70,9 @@ class FolderHistoryManager:
         if history_file:
             self.history_file = history_file
         else:
-            user_dir = os.path.expanduser("~")
-            config_dir = os.path.join(user_dir, ".sap_visualizer")
+            config_dir = os.environ.get("SAP_VISUALIZER_CONFIG_DIR") or os.path.join(
+                os.path.expanduser("~"), ".sap_visualizer"
+            )
             try:
                 os.makedirs(config_dir, exist_ok=True)
                 self.history_file = os.path.join(config_dir, "folder_history.json")
