@@ -5,6 +5,7 @@ import tempfile
 import shutil
 import json
 import gzip
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -225,6 +226,34 @@ class TestSAPVisualizerGUI(unittest.TestCase):
         bottom_y = 25 + 420
         self.assertEqual(surf.get_at((mid_x, expected_y))[:3], NODE_COLORS[0])
         self.assertNotEqual(surf.get_at((mid_x, bottom_y))[:3], NODE_COLORS[0])
+
+    def test_config_overlay_caches_yaml_across_frames(self):
+        """設定確認モーダル表示中の複数フレーム描画でload_config_dataが1回しか呼ばれないこと"""
+        gui = SAPVisualizerGUI(self.logger)
+        gui.show_config = True
+
+        mock_items = [{"is_section": False, "key": "SAP.THRESHOLD", "value": "0.2", "val_type": "number"}]
+        with patch("sap_visualizer.views.overlays.load_config_data", return_value=(mock_items, True)) as mock_load:
+            for _ in range(5):
+                gui.draw()
+            self.assertEqual(mock_load.call_count, 1)
+
+            # clear_config_cache後は再読み込みされる
+            gui.overlays_view.clear_config_cache()
+            gui.draw()
+            self.assertEqual(mock_load.call_count, 2)
+
+            # パス変更時も再読み込みされる
+            self.logger.log_file_path = os.path.join(self.test_dir, "other_log.jsonl.gz")
+            gui.draw()
+            self.assertEqual(mock_load.call_count, 3)
+
+        # show_config=Falseならload_config_dataは呼ばれない
+        gui.overlays_view.clear_config_cache()
+        gui.show_config = False
+        with patch("sap_visualizer.views.overlays.load_config_data", return_value=(mock_items, True)) as mock_load:
+            gui.draw()
+            self.assertEqual(mock_load.call_count, 0)
 
 
 if __name__ == "__main__":

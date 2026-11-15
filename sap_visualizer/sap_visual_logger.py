@@ -30,9 +30,10 @@ class SAPVisualLogger:
         self.dominant_threshold: Optional[float] = None
         self.last_error_msg: str = ""
         self.last_missing_file_type: str = ""
+        self._resolved_cache: List[ResolvedFrameInfo] = []
 
     def _update_metadata_cache(self) -> None:
-        """ログ読み込み完了時にメタデータ（最大ノード数、パラメータ閾値等）を計算してキャッシュ"""
+        """ログ読み込み完了時にメタデータ（最大ノード数、パラメータ閾値、事前解決キャッシュ等）を計算してキャッシュ"""
         max_n = 0
         for f in self.history:
             if len(f.activations) > max_n:
@@ -55,6 +56,48 @@ class SAPVisualLogger:
             if self.dominant_threshold is None and self.history:
                 self.dominant_threshold = self.history[0].threshold
 
+        # 3. 全フレームの確定情報を1パスO(N)で事前フォワードフィル計算
+        self._rebuild_resolved_cache()
+
+    def _rebuild_resolved_cache(self) -> None:
+        """全フレームの欠損フォールバック情報を先頭から1パスで解決しキャッシュする"""
+        cache: List[ResolvedFrameInfo] = []
+        last_a: List[float] = []
+        last_w: List[List[float]] = []
+        last_plan: Optional[int] = None
+        last_sel: List[int] = []
+
+        fixed_threshold: Optional[float] = None
+        if self.config_threshold is not None:
+            fixed_threshold = self.config_threshold
+        elif self.dominant_threshold is not None:
+            fixed_threshold = self.dominant_threshold
+
+        for frame in self.history:
+            if frame.activations:
+                last_a = frame.activations
+            if frame.weight_matrix:
+                last_w = frame.weight_matrix
+            if frame.plan is not None:
+                last_plan = frame.plan
+            if frame.selectplans:
+                last_sel = frame.selectplans
+
+            threshold = fixed_threshold if fixed_threshold is not None else frame.threshold
+            cache.append(
+                ResolvedFrameInfo(
+                    plan=last_plan,
+                    selectplans=last_sel,
+                    activations=last_a,
+                    weight_matrix=last_w,
+                    episode=frame.episode,
+                    step=frame.step,
+                    event_type=frame.event_type,
+                    threshold=threshold,
+                )
+            )
+        self._resolved_cache = cache
+
     @property
     def active_threshold(self) -> float:
         """現在アクティブな基準活性化閾値 (float)"""
@@ -75,6 +118,7 @@ class SAPVisualLogger:
         self.history = []
         self.max_nodes = 0
         self.log_file_path = log_file_path
+        self._resolved_cache = []
 
         if not os.path.exists(log_file_path):
             self.last_error_msg = f"SAP動的ログファイルが見つかりません: {log_file_path}"
@@ -182,7 +226,7 @@ class SAPVisualLogger:
     def resolve_frame(self, index: int) -> ResolvedFrameInfo:
         """
         指定インデックスのフレーム情報について、欠損値（A, weight, plan 等）を
-        直前の有効フレームから復元（Resolve）した確定情報オブジェクトを生成して返す。
+        直前の有効フレームから復元（Resolve）した確定情報オブジェクトをO(1)で返す。
         """
         if not self.history or index < 0 or index >= len(self.history):
             return ResolvedFrameInfo(
@@ -195,66 +239,10 @@ class SAPVisualLogger:
                 event_type=EventType.STEP
             )
 
-        frame = self.history[index]
-        plan = frame.plan
-        selectplans = frame.selectplans
-        A_raw = frame.activations
-        weight_raw = frame.weight_matrix
-        episode = frame.episode
-        step = frame.step
-        event_type = frame.event_type
-        threshold = frame.threshold
+        if len(self._resolved_cache) != len(self.history):
+            self._rebuild_resolved_cache()
 
-        # 1. 活性値 A の欠損フォールバック
-        if not A_raw:
-            for k in range(index - 1, -1, -1):
-                prev_a = self.history[k].activations
-                if prev_a:
-                    A_raw = prev_a
-                    break
-
-        # 2. 重み行列 weight の欠損フォールバック
-        if not weight_raw:
-            for k in range(index - 1, -1, -1):
-                prev_w = self.history[k].weight_matrix
-                if prev_w:
-                    weight_raw = prev_w
-                    break
-
-        # 3. 選択知識 plan の欠損フォールバック
-        if plan is None:
-            for k in range(index - 1, -1, -1):
-                prev_plan = self.history[k].plan
-                if prev_plan is not None:
-                    plan = prev_plan
-                    break
-
-        # 4. 転移候補 selectplans の欠損フォールバック
-        if not selectplans:
-            for k in range(index - 1, -1, -1):
-                prev_sel = self.history[k].selectplans
-                if prev_sel:
-                    selectplans = prev_sel
-                    break
-
-        # 5. 活性化閾値 threshold の決定（設定ファイルパラメータ最優先 ＆ ログ内一貫性の保証）
-        if self.config_threshold is not None:
-            threshold = self.config_threshold
-        elif self.dominant_threshold is not None:
-            threshold = self.dominant_threshold
-        else:
-            threshold = frame.threshold
-
-        return ResolvedFrameInfo(
-            plan=plan,
-            selectplans=selectplans,
-            activations=A_raw,
-            weight_matrix=weight_raw,
-            episode=episode,
-            step=step,
-            event_type=event_type,
-            threshold=threshold
-        )
+        return self._resolved_cache[index]
 
 
     def find_next_event_index(self, current_index: int, event_type: str) -> int:

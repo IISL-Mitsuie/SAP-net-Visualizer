@@ -2,7 +2,7 @@
 SAP-net Visualizer モーダルダイアログ（設定確認 ＆ 操作ガイド）描画ビュー
 """
 import pygame
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 from .base_view import BaseView
 from ..constants import APP_VERSION
 from ..config_loader import load_config_data
@@ -26,6 +26,17 @@ class OverlaysView(BaseView):
     """ハイパーパラメータ設定モーダルおよびヘルプ・操作ガイドモーダルを担当するビュークラス"""
     def __init__(self, screen: pygame.Surface, fonts: Dict[str, pygame.font.Font]):
         super().__init__(screen, fonts)
+        self._cached_config_path: Optional[str] = None
+        self._cached_config_items: List[Dict[str, Any]] = []
+        self._cached_yaml_loaded: bool = False
+        self._has_cached_config: bool = False
+
+    def clear_config_cache(self) -> None:
+        """キャッシュされた設定YAMLデータを破棄する"""
+        self._cached_config_path = None
+        self._cached_config_items = []
+        self._cached_yaml_loaded = False
+        self._has_cached_config = False
 
     def draw_config_overlay(
         self,
@@ -54,8 +65,12 @@ class OverlaysView(BaseView):
         self.screen.blit(cfg_title, (dlg_x + 25, dlg_y + 16))
         pygame.draw.line(self.screen, COLOR_BORDER_DEFAULT, (dlg_x + 20, dlg_y + 50), (dlg_x + dlg_w - 20, dlg_y + 50), 2)
 
-        # 4. データ読み込み
-        config_items, yaml_loaded = load_config_data(log_file_path)
+        # 4. データ読み込み（パス変更時・初回のみYAMLを読み込み、毎フレームの同期I/Oを回避）
+        if not self._has_cached_config or log_file_path != self._cached_config_path:
+            self._cached_config_items, self._cached_yaml_loaded = load_config_data(log_file_path)
+            self._cached_config_path = log_file_path
+            self._has_cached_config = True
+        config_items = self._cached_config_items
 
         # 5. カラムヘッダー描画
         head_y = dlg_y + 58
