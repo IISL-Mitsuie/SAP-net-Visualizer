@@ -4,6 +4,7 @@ SAP-net Visualizer メインエントリーポイント
 import os
 import sys
 import logging
+import platform
 
 # windowed (GUI) モード起動時に stdout/stderr が None の場合の安全対策
 if sys.stdout is None:
@@ -17,25 +18,24 @@ if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
 from sap_visualizer import (
+    APP_VERSION,
     SAPVisualLogger,
     SAPVisualizerGUI,
     FolderHistoryManager,
     select_simulation_folder,
+    setup_logging,
+    install_exception_hooks,
 )
 
 
-def setup_logging():
-    """ロギング設定の初期化"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(levelname)s] %(name)s: %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-
-
 def main():
-    setup_logging()
+    log_path = setup_logging()
+    install_exception_hooks()
     logger_instance = logging.getLogger("main")
+    logger_instance.info(
+        f"SAP-net Visualizer v{APP_VERSION} started "
+        f"(Python {platform.python_version()}, OS {platform.platform()}, log={log_path})"
+    )
 
     print("=" * 60)
     print("      SAP-net Visualizer")

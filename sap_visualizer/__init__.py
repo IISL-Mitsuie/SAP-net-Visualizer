@@ -6,6 +6,7 @@ from .sap_visual_logger import SAPVisualLogger
 from .sap_visualizer_gui import SAPVisualizerGUI
 from .history_manager import FolderHistoryManager
 from .folder_selector_gui import FolderSelectorDialog, select_simulation_folder
+from .logging_setup import get_log_dir, setup_logging, install_exception_hooks
 from .updater import (
     UpdateInfo,
     compare_versions,
@@ -27,6 +28,9 @@ __all__ = [
     "FolderHistoryManager",
     "FolderSelectorDialog",
     "select_simulation_folder",
+    "get_log_dir",
+    "setup_logging",
+    "install_exception_hooks",
     "UpdateInfo",
     "compare_versions",
     "is_newer_version",
