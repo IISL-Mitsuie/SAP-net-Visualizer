@@ -4,12 +4,26 @@ pytest 共通フィクスチャ設定。
 およびテスト中の外部ネットワーク通信を防止する。
 """
 import os
+import sys
+import time
+
+_tcl_lib = os.path.join(sys.base_prefix, "tcl", "tcl8.6")
+_tk_lib = os.path.join(sys.base_prefix, "tcl", "tk8.6")
+if os.path.isdir(_tcl_lib):
+    os.environ.setdefault("TCL_LIBRARY", _tcl_lib)
+if os.path.isdir(_tk_lib):
+    os.environ.setdefault("TK_LIBRARY", _tk_lib)
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 import pygame  # noqa: E402
 import pytest  # noqa: E402
+
+try:
+    import tkinter as tk  # noqa: E402
+except ImportError:  # pragma: no cover
+    tk = None
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -40,9 +54,24 @@ def isolate_test_session(tmp_path_factory):
     pygame.font.SysFont = _cached_sysfont
     pygame.quit = _wrapped_quit
 
+    orig_tk_init = tk.Tk.__init__ if tk is not None else None
+    if tk is not None and orig_tk_init is not None:
+        def _retried_tk_init(self, *args, **kwargs):
+            for attempt in range(3):
+                try:
+                    return orig_tk_init(self, *args, **kwargs)
+                except tk.TclError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.05)
+
+        tk.Tk.__init__ = _retried_tk_init
+
     try:
         yield
     finally:
+        if tk is not None and orig_tk_init is not None:
+            tk.Tk.__init__ = orig_tk_init
         pygame.font.SysFont = orig_sysfont
         pygame.quit = orig_quit
         font_cache.clear()
