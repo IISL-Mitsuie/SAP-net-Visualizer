@@ -2,7 +2,7 @@
 SAP-net Visualizer 共通定数定義モジュール
 """
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 APP_NAME = "SAP-net Visualizer"
 
 
