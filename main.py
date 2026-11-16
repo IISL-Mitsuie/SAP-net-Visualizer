@@ -1,5 +1,14 @@
 """
 SAP-net Visualizer メインエントリーポイント
+
+Usage:
+    python main.py [<log_folder_or_file>]
+
+起動時の動作:
+    - コマンドライン引数でフォルダまたはログファイル（.jsonl / .jsonl.gz）を指定した場合は直接読み込みます。
+    - 引数を省略した場合（または存在しないパスを指定した場合）は、フォルダ選択＆履歴ダイアログを表示します。
+    - Windows 環境では Inno Setup 上書き更新時のプロセス検知用ミューテックス (SAPNetVisualizer_AppMutex) を取得し、
+      ~/.sap_visualizer/logs/app.log へのファイルロギングおよび未捕捉例外フックを初期化します。
 """
 import os
 import sys
