@@ -127,7 +127,8 @@ class OverlaysView(BaseView):
                 if val_type == "bool":
                     val_color = (25, 135, 50) if val_str == "True" else (160, 40, 40)
                 elif val_type == "number":
-                    val_color = COLOR_ACCENT_RED if ("THRESHOLD" in key_str or "REWARD" in key_str) else (20, 90, 180)
+                    key_upper = key_str.upper()
+                    val_color = COLOR_ACCENT_RED if ("THRESHOLD" in key_upper or "REWARD" in key_upper) else (20, 90, 180)
                 elif val_type == "list":
                     val_color = (55, 70, 90)
                 elif val_type == "none":
