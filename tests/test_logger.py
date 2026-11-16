@@ -335,6 +335,37 @@ class TestSAPVisualLogger(unittest.TestCase):
         self.assertEqual(logger.resolve_frame(0).threshold, 0.75)
         self.assertEqual(logger.resolve_frame(1).threshold, 0.75)
 
+    def test_load_from_folder_with_windows_path_config_yaml(self):
+        """Windowsパスと複数*_thresholdを含むconfig_used_*.yamlがあるフォルダでconfig_threshold=0.20となること"""
+        folder_path = os.path.join(self.test_dir, "output_20261109_222837")
+        os.makedirs(folder_path, exist_ok=True)
+        log_path = os.path.join(folder_path, "sap_dynamic_log_20261109_222837.jsonl.gz")
+        with gzip.open(log_path, "wt", encoding="utf-8") as f:
+            f.write(json.dumps({"index": 0, "episode": 1, "step": 1, "event_type": "STEP", "threshold": 0.15}) + "\n")
+
+        yaml_path = os.path.join(folder_path, "config_used_20261109_222837.yaml")
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            f.write(
+                """\
+reward:
+  near_wall_threshold: 0.5
+sap:
+  q_span_threshold: 0.5
+  threshold: 0.20
+continual_learning:
+  policy:
+    files:
+      - "output_robotino_rl_control\\S-SAP_continual\\output_20261109_222837\\acquired_policies_20261109_222837\\policy_task1.npy"
+"""
+            )
+
+        logger = SAPVisualLogger()
+        success = logger.load_from_folder(folder_path)
+        self.assertTrue(success)
+        self.assertEqual(logger.config_threshold, 0.20)
+        self.assertEqual(logger.active_threshold, 0.20)
+        self.assertEqual(logger.resolve_frame(0).threshold, 0.20)
+
 
 if __name__ == "__main__":
     unittest.main()

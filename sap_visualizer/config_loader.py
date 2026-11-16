@@ -3,81 +3,145 @@ SAP-net Visualizer ハイパーパラメータ設定ファイル（YAML）動的
 特定のシミュレーション環境に依存しない汎用的なYAML解析と値の抽出を提供します。
 """
 import os
+import re
+import math
 import logging
 from typing import List, Tuple, Optional, Any, Dict
 
 logger = logging.getLogger(__name__)
 
+_THRESHOLD_KEYS = ("THRESHOLD", "ACTIVATION_THRESHOLD", "SAP_THRESHOLD")
 
-def load_raw_config(log_file_path: Optional[str] = None) -> Optional[dict]:
+
+def _sanitize_yaml_text(yaml_text: str) -> str:
     """
-    ログファイルのあるディレクトリから config_used_*.yaml を探索し、生の dict として読み込んで返す。
+    ダブルクォート文字列内の未エスケープバックスラッシュ（Windowsパス等）を \\ に正規化する。
+    既存の \\ や \" は二重エスケープしない。
+    """
+    def _fix_dq(match: re.Match) -> str:
+        content = match.group(1)
+        fixed = re.sub(
+            r'\\(.)',
+            lambda m: m.group(0) if m.group(1) in ('\\', '"') else '\\\\' + m.group(1),
+            content,
+        )
+        return f'"{fixed}"'
+
+    return re.sub(r'"((?:\\.|[^"\r\n\\])*)"', _fix_dq, yaml_text)
+
+
+def _resolve_config_yaml_path(log_file_path: Optional[str]) -> Optional[str]:
+    """
+    ログファイル、ディレクトリ、または YAML ファイルパスから対象の設定 YAML ファイルパスを解決する。
     """
     if not log_file_path or not os.path.exists(log_file_path):
         return None
 
-    log_dir = os.path.dirname(os.path.abspath(log_file_path))
+    abs_path = os.path.abspath(log_file_path)
+    if os.path.isfile(abs_path) and abs_path.lower().endswith((".yaml", ".yml")):
+        return abs_path
+
+    log_dir = abs_path if os.path.isdir(abs_path) else os.path.dirname(abs_path)
+    if not os.path.isdir(log_dir):
+        return None
+
     yaml_files = [
         os.path.join(log_dir, f)
-        for f in os.listdir(log_dir)
-        if f.startswith("config_used") and f.endswith(".yaml")
+        for f in sorted(os.listdir(log_dir))
+        if f.startswith("config_used")
+        and f.lower().endswith((".yaml", ".yml"))
+        and os.path.isfile(os.path.join(log_dir, f))
     ]
-
     if not yaml_files:
+        return None
+
+    ts_match = re.search(r'(\d{8}_\d{6})', os.path.basename(abs_path))
+    if ts_match:
+        timestamp = ts_match.group(1)
+        matched_files = [p for p in yaml_files if timestamp in os.path.basename(p)]
+        if matched_files:
+            return max(matched_files, key=os.path.getmtime)
+
+    return max(yaml_files, key=os.path.getmtime)
+
+
+def _to_valid_float(val: Any) -> Optional[float]:
+    """
+    bool・None・コンテナ型を除外して有限の float に変換する。変換不能な場合は None を返す。
+    """
+    if val is None or isinstance(val, (bool, list, dict)):
+        return None
+    try:
+        num = float(val)
+    except (ValueError, TypeError):
+        return None
+    return num if math.isfinite(num) else None
+
+
+def load_raw_config(log_file_path: Optional[str] = None) -> Optional[dict]:
+    """
+    ログファイルのあるディレクトリ等から config_used_*.yaml を探索し、生の dict として読み込んで返す。
+    """
+    yaml_path = _resolve_config_yaml_path(log_file_path)
+    if not yaml_path:
         return None
 
     try:
         import yaml
-        with open(yaml_files[0], mode="r", encoding="utf-8") as f:
-            raw_yaml = yaml.safe_load(f)
-            if isinstance(raw_yaml, dict):
-                return raw_yaml
+        with open(yaml_path, mode="r", encoding="utf-8") as f:
+            raw_text = f.read()
+        sanitized_text = _sanitize_yaml_text(raw_text)
+        try:
+            raw_yaml = yaml.safe_load(sanitized_text)
+        except yaml.YAMLError:
+            raw_yaml = yaml.safe_load(raw_text)
+        if isinstance(raw_yaml, dict):
+            return raw_yaml
     except (ImportError, ModuleNotFoundError):
         logger.warning("PyYAML is not installed. Run 'pip install pyyaml' to enable config viewer.")
     except Exception as e:
-        logger.warning(f"Failed to load raw YAML config file ({yaml_files[0]}): {e}")
+        logger.warning(f"Failed to load raw YAML config file ({yaml_path}): {e}")
 
     return None
 
 
 def get_config_threshold(log_file_path: Optional[str] = None) -> Optional[float]:
     """
-    config_used_*.yaml の階層から SAP.THRESHOLD (または THRESHOLD) を再帰探索して float で取得。
+    config_used_*.yaml の階層から SAP.THRESHOLD (または THRESHOLD) を探索して float で取得。
     見つからない場合は None を返す。
     """
     config = load_raw_config(log_file_path)
     if not config or not isinstance(config, dict):
         return None
 
-    def search_threshold(data: Any, parent_key: str = "") -> Optional[float]:
+    def search_threshold(data: Any) -> Optional[float]:
         if isinstance(data, dict):
-            # SAPセクションを最優先で確認
             for k, v in data.items():
-                k_str = str(k).upper()
-                if "THRESHOLD" in k_str:
-                    try:
-                        return float(v)
-                    except (ValueError, TypeError):
-                        pass
+                if str(k).upper() in _THRESHOLD_KEYS:
+                    num = _to_valid_float(v)
+                    if num is not None:
+                        return num
+            for v in data.values():
                 if isinstance(v, (dict, list)):
-                    res = search_threshold(v, f"{parent_key}.{k}" if parent_key else str(k))
+                    res = search_threshold(v)
                     if res is not None:
                         return res
         elif isinstance(data, list):
             for item in data:
-                res = search_threshold(item, parent_key)
-                if res is not None:
-                    return res
+                if isinstance(item, (dict, list)):
+                    res = search_threshold(item)
+                    if res is not None:
+                        return res
         return None
 
-    # 1. まず 'SAP' セクション内を優先探索
+    # 1. まず最上位 'SAP' セクション内を優先探索
     for k, v in config.items():
         if isinstance(k, str) and k.upper() == "SAP" and isinstance(v, dict):
-            thresh = search_threshold(v, "SAP")
+            thresh = search_threshold(v)
             if thresh is not None:
                 return thresh
 
-    # 2. 全体から探索
+    # 2. 全体から完全一致キーを再帰探索
     return search_threshold(config)
 
 
@@ -96,6 +160,8 @@ def _format_yaml_value(val: Any) -> Tuple[str, str]:
         return f"[{items_str}]", "list"
     if isinstance(val, dict):
         return f"{{ {len(val)} items }}", "dict"
+    if isinstance(val, str) and val == "":
+        return '""', "str"
     v_str = str(val).strip().replace("\n", " ")
     if not v_str or v_str.lower() in ("none", "null", "nan", "empty"):
         return "-", "none"
@@ -150,13 +216,8 @@ def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Dict[str
                     "val_type": "none"
                 }
             ], False
-        log_dir = os.path.dirname(os.path.abspath(log_file_path))
-        yaml_files = [
-            os.path.join(log_dir, f)
-            for f in os.listdir(log_dir)
-            if f.startswith("config_used") and f.endswith(".yaml")
-        ]
-        if not yaml_files:
+        yaml_path = _resolve_config_yaml_path(log_file_path)
+        if not yaml_path:
             return [
                 {
                     "is_section": False,
@@ -186,7 +247,7 @@ def load_config_data(log_file_path: Optional[str] = None) -> Tuple[List[Dict[str
                 "is_section": False,
                 "section": "STATUS",
                 "key": "CONFIG_STATUS",
-                "value": f"設定ファイル ({os.path.basename(yaml_files[0])}) の解析に失敗しました",
+                "value": f"設定ファイル ({os.path.basename(yaml_path)}) の解析に失敗しました",
                 "val_type": "none"
             }
         ], False
